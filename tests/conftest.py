@@ -8,6 +8,7 @@ import sys
 import tempfile
 import threading
 from pathlib import Path
+from urllib.parse import quote
 
 import pytest
 
@@ -38,7 +39,8 @@ class Client:
             data = body if isinstance(body, (bytes, str)) else json.dumps(body)
             h["Content-Type"] = "application/json"
         h.update(headers or {})
-        conn.request(method, path, body=data, headers=h)
+        conn.request(method, quote(path, safe="/?&=%:,."), body=data.encode("utf-8") if isinstance(data, str) else data,
+                     headers=h)
         r = conn.getresponse()
         payload = r.read()
         hdrs = {k.lower(): v for k, v in r.getheaders()}

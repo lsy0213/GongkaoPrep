@@ -32,6 +32,12 @@ def content_dir() -> Path:
     return resource_dir() / "content"
 
 
+def load_content(name):
+    """读取 content/ 下的内置 JSON。"""
+    with open(content_dir() / name, encoding="utf-8") as f:
+        return json.load(f)
+
+
 def home_dir() -> Path:
     """%APPDATA%/GongkaoPrep：固定位置，只放 location.json（数据目录挪走以后也一样）。"""
     base = os.environ.get("APPDATA") or str(Path.home())

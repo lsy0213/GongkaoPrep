@@ -357,6 +357,7 @@ def _table(boxes, h):
         return None
     # 一格里折成两行的字：下一行只有这一列有字、而且紧挨着，并回上一行
     out = []
+    prev_y1 = 0.0
     for cells, r in zip(grid, rows):
         if out and sum(1 for c in cells if c) == 1 and sum(1 for c in out[-1] if c) >= 2:
             c = next(i for i, x in enumerate(cells) if x)

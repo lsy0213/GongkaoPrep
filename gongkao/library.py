@@ -7,12 +7,12 @@ import hashlib
 import json
 import os
 import re
-import sqlite3
 import threading
 import time
 import traceback
 import zlib
 
+from .dbutil import open_db
 from .paths import data_dir
 
 LIB_DIR = data_dir() / "library"
@@ -213,7 +213,8 @@ def resolve_rel(rel):
 
 def _text_db():
     LIB_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(TEXT_DB, timeout=30)
+    conn = open_db(TEXT_DB)
+    conn.row_factory = None
     conn.execute("CREATE TABLE IF NOT EXISTS texts (fid TEXT PRIMARY KEY, mtime INTEGER, size INTEGER, "
                  "offsets TEXT, body BLOB)")
     return conn

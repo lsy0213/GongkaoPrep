@@ -22,6 +22,7 @@ import unicodedata
 from collections import Counter, defaultdict
 
 from . import doccleanup, docq, layout, ocr, pdftext
+from .dbutil import open_db
 from .paths import data_dir
 
 LIB = data_dir() / "library"
@@ -56,8 +57,7 @@ _lock = threading.Lock()
 
 def connect():
     LIB.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=30)
-    conn.row_factory = sqlite3.Row
+    conn = open_db(DB_PATH)
     conn.executescript(SCHEMA)
     try:
         conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5("

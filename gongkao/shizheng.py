@@ -20,6 +20,7 @@ import threading
 import time
 from collections import Counter, defaultdict
 
+from .dbutil import open_db
 from .paths import data_dir
 
 LIB = data_dir() / "library"
@@ -425,8 +426,7 @@ def connect(path=None):
     from . import docs
 
     LIB.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path or DB_PATH, timeout=30)
-    conn.row_factory = sqlite3.Row
+    conn = open_db(path or DB_PATH)
     conn.executescript(docs.SCHEMA + META_SCHEMA)
     try:
         conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5("
@@ -1043,7 +1043,6 @@ def _jd_layout(root, f, blocks, title):
     按页认出来：原文取干净的那份（没有就从批注版取右栏），放最前面；导图页还原成提纲；批注版不要。"""
     import pymupdf
 
-    from . import docs
 
     d = pymupdf.open(os.path.join(root, f["rel"]))
     try:

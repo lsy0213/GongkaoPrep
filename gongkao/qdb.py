@@ -8,11 +8,10 @@
 """
 
 import json
-import os
 import random
-import sqlite3
 import threading
 
+from .dbutil import open_db, stamp
 from .paths import data_dir
 
 DB_PATH = data_dir() / "library" / "questions.db"
@@ -37,8 +36,7 @@ _lock = threading.Lock()
 
 def connect():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=30)
-    conn.row_factory = sqlite3.Row
+    conn = open_db(DB_PATH)
     conn.executescript(SCHEMA)
     return conn
 
@@ -129,11 +127,7 @@ class Bank:
         self.custom_count = 0
 
     def _key(self, extra):
-        try:
-            mt = os.path.getmtime(DB_PATH)
-        except OSError:
-            mt = 0
-        return (mt, extra)
+        return (stamp(DB_PATH), extra)
 
     def refresh(self, extra_key):
         key = self._key(extra_key)
