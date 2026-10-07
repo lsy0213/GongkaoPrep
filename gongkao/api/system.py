@@ -1,6 +1,7 @@
 """设置、界面偏好、导出导入、备份、AI 服务商信息。"""
 
 import json
+import re
 
 from .. import ai, secret, userdb
 from ..userdb import DEFAULT_SETTINGS, get_settings
@@ -104,6 +105,37 @@ def diagnostics(ctx):
         "integrity": conn.execute("PRAGMA quick_check").fetchone()[0],
         "counts": counts, "library_root": s.get("library_root"), "ai_provider": s.get("ai_provider"),
         "ai_key_saved": s.get("ai_key_saved"), "job": library.jobs.status(), "log": logs.tail(400),
+    }
+
+
+def _ver(v):
+    return tuple(int(x) for x in re.findall(r"\d+", v or "")[:4])
+
+
+@route("GET", "/api/update/check")
+def update_check(ctx):
+    """点“检查更新”时才联网：读 GitHub 上本项目的最新 Release，和当前版本比较。"""
+    import urllib.error
+    import urllib.request
+
+    from .. import REPO, VERSION
+
+    url = f"https://api.github.com/repos/{REPO}/releases/latest"
+    req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "GongkaoPrep"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:  # noqa: S310 —— 固定的 https 地址
+            data = json.load(r)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return {"current": VERSION, "latest": "", "newer": False, "note": "还没有发布过新版本"}
+        return {"error": f"检查更新失败（{e.code}）"}
+    except (OSError, ValueError) as e:
+        return {"error": f"连不上 GitHub：{e}"}
+    latest = (data.get("tag_name") or "").lstrip("vV")
+    return {
+        "current": VERSION, "latest": latest, "newer": _ver(latest) > _ver(VERSION),
+        "url": data.get("html_url") or f"https://github.com/{REPO}/releases", "notes": (data.get("body") or "")[:2000],
+        "published_at": data.get("published_at") or "",
     }
 
 

@@ -1,8 +1,11 @@
-pywebview>=5.0
-anthropic>=1.0
-pyinstaller>=6.0
-pillow>=10.0
-pymupdf>=1.24
-python-docx>=1.1
-rapidocr_onnxruntime>=1.4
-onnxruntime-directml>=1.20
+# 运行依赖（锁定到测试过的版本；升级时一起改、跑一遍测试和 python tools/golden.py check）
+pywebview==6.2.1
+anthropic==1.11.0
+pillow==12.3.0
+pymupdf==1.28.2
+python-docx==1.2.0
+rapidocr_onnxruntime==1.4.4
+onnxruntime-directml==1.24.4
+openpyxl==3.1.5   # 职位表 .xlsx
+xlrd==2.0.2       # 职位表 .xls
+qrcode==8.2       # 手机扫码连接

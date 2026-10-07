@@ -157,8 +157,27 @@ export async function render(el) {
       <div class="card-head"><h2>关于与诊断</h2><span class="small muted">版本 ${esc(s.app_version || "")}</span></div>
       <p class="small ink2" style="margin-top:0">软件出问题时，导出诊断信息（版本、环境、数据库状态、最近的日志；不含 API Key 和你的学习内容）发给帮你排查的人。</p>
       <div class="row"><button class="btn ghost" id="diag">导出诊断信息</button>
+        <button class="btn ghost" id="upd">检查更新</button>
         <span class="small muted">日志在 <code>${esc(st.dir)}\\logs</code></span></div>
+      <div id="upd-res"></div>
     </div>`;
+
+  el.querySelector("#upd").onclick = async (e) => {
+    const btn = e.currentTarget, res = el.querySelector("#upd-res");
+    btn.disabled = true;
+    res.innerHTML = `<p class="small muted">正在检查…</p>`;
+    try {
+      const u = await apiGet("/api/update/check");
+      res.innerHTML = u.newer
+        ? `<div class="ai-box mt">有新版本 <b>${esc(u.latest)}</b>（当前 ${esc(u.current)}）。<a href="${esc(u.url)}" target="_blank" rel="noopener">去下载</a>
+            ${u.notes ? `<div class="small muted mt" style="white-space:pre-wrap">${esc(u.notes)}</div>` : ""}</div>`
+        : `<p class="small muted">${esc(u.note || `已经是最新版本（${u.current}）`)}</p>`;
+    } catch (err) {
+      res.innerHTML = `<p class="small" style="color:var(--bad)">${esc(err.message)}</p>`;
+    } finally {
+      btn.disabled = false;
+    }
+  };
 
   el.querySelector("#backup-now").onclick = async () => {
     try { const r = await apiPost("/api/backups/create"); toast("已备份：" + r.name); render(el); } catch (e) { toast(e.message, 4000); }
