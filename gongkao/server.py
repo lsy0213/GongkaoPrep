@@ -20,7 +20,7 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import ai, library, planner, qdb, shizheng
+from . import ai, library, planner, qdb, secret, shizheng
 from . import docs as docmod
 from .paths import content_dir, data_dir, web_dir
 
@@ -173,6 +173,10 @@ def init_db():
         conn.execute(
             "UPDATE settings SET value=? WHERE key='start_date' AND value=''", (today_str(),)
         )
+        # 老版本明文保存的 API Key：加密后存回
+        row = conn.execute("SELECT value FROM settings WHERE key='ai_api_key'").fetchone()
+        if row and row[0] and not secret.is_protected(row[0]):
+            conn.execute("UPDATE settings SET value=? WHERE key='ai_api_key'", (secret.protect(row[0]),))
 
 
 def rows(conn, sql, args=()):
@@ -181,6 +185,7 @@ def rows(conn, sql, args=()):
 
 def get_settings(conn, include_secret=False):
     s = {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM settings")}
+    s["ai_api_key"] = secret.unprotect(s.get("ai_api_key") or "")
     if not include_secret:
         key = s.get("ai_api_key") or ""
         s["ai_api_key"] = ""  # 完整 Key 不回传给界面，只给一个掩码提示
@@ -1147,8 +1152,10 @@ class Handler(BaseHTTPRequestHandler):
             for k, v in body.items():
                 if k not in DEFAULT_SETTINGS:
                     continue
-                if k == "ai_api_key" and not (v or "").strip():
-                    continue  # Key 输入框留空表示「不修改」
+                if k == "ai_api_key":
+                    if not (v or "").strip():
+                        continue  # Key 输入框留空表示「不修改」
+                    v = secret.protect(str(v).strip())
                 conn.execute("INSERT OR REPLACE INTO settings(key, value) VALUES (?, ?)", (k, str(v).strip()))
             # 修改考试日期后，重新生成今天尚未开始的计划任务
             if {"guokao_date", "shengkao_date", "start_date", "daily_hours"} & body.keys():
