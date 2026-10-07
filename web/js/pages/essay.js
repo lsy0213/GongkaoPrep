@@ -1,4 +1,4 @@
-import { apiGet, apiPost, countChars, esc, fmtClock, mountAIBox, store, toast } from "../lib.js";
+import { apiGet, apiPost, countChars, esc, fmtClock, mountAIBox, scoreTrend, store, toast } from "../lib.js";
 
 const SRC = [["builtin", "原创练习"], ["国考", "国考真题"], ["四川", "四川真题"]];
 // 真题卷别：把资料库里五花八门的卷名归成几类，按这个顺序排
@@ -9,6 +9,18 @@ function levelOf(s) {
   if (/^[A-Z]卷$/.test(l)) return "B/C 卷";
   if (l === s.exam) return "不分卷"; // 早年没有分级的卷子，level 只记了考试名
   return l;
+}
+
+// AI 批改得分走势（换算成得分率，不同满分的题放在一起比）
+function essayTrend(mine) {
+  const scored = mine.filter((m) => m.ai_score != null && m.ai_full).slice().reverse();
+  if (scored.length < 2) return "";
+  const pts = scored.map((m) => ({ v: Math.round((m.ai_score / m.ai_full) * 100),
+    tip: `${(m.created_at || "").slice(5, 16)}：${m.ai_score} / ${m.ai_full}` }));
+  const recent = pts.slice(-5).reduce((a, p) => a + p.v, 0) / Math.min(5, pts.length);
+  return `<div class="card mb"><div class="card-head"><h3>AI 批改得分率走势</h3><span class="small muted">最近 5 次平均 ${Math.round(recent)}% · 共 ${pts.length} 次</span></div>
+    ${scoreTrend(pts, { target: 70, label: "七成" })}
+    <p class="small muted" style="margin:0">每次按同一套评分细则（要点 70%、结构 15%、语言 15%）批改；得分率 = AI 估分 ÷ 满分。</p></div>`;
 }
 
 export async function render(el, ctx) {
@@ -45,6 +57,7 @@ export async function render(el, ctx) {
       <div class="page-head"><div><div class="eyebrow">申论练习</div><h1>读材料，找要点，动笔写</h1>
         <p>每套题包含一组材料和 3–5 道题。写完后对照参考答案自评，配置了 AI 助教还可以请 AI 估分和点评。${data.real_count ? `历年真题 ${data.real_count} 套来自你的资料库。` : ""}</p></div>
         <a class="btn" href="#/learn/essay">先学申论教程</a></div>
+      ${essayTrend(mine)}
       <div class="row mb"><div class="seg" id="src">${SRC.map(([k, n]) => `<button data-src="${k}" class="${src === k ? "active" : ""}">${n}（${data.sets.filter((s) => (k === "builtin" ? !s.real : s.exam === k)).length}）</button>`).join("")}</div></div>
       ${domains.length > 1 ? `<div class="row mb" id="dom" style="flex-wrap:wrap;gap:6px">${[["", "全部", pool.length], ...domains.map((d) => [d, d, pool.filter((s) => domainOf(s) === d).length])]
         .map(([k, n, c]) => `<button class="chip${dom === k ? " brand" : ""}" data-dom="${esc(k)}" style="cursor:pointer">${esc(n)} ${c}</button>`).join("")}</div>` : ""}
@@ -98,7 +111,7 @@ export async function render(el, ctx) {
           ${history.length ? `<div class="card"><h3 class="mb">历史作答（${history.length}）</h3>
             ${history.map((h) => `<details class="note-item"><summary class="row" style="cursor:pointer">
               <span class="small">${esc(h.created_at.slice(0, 16))}</span><span class="small muted">${h.words} 字 · 用时 ${fmtClock(h.seconds)}</span>
-              ${h.self_score != null ? `<span class="chip">自评 ${h.self_score} 分</span>` : ""}${h.ai_feedback ? `<span class="chip brand">有 AI 点评</span>` : ""}</summary>
+              ${h.self_score != null ? `<span class="chip">自评 ${h.self_score} 分</span>` : ""}${h.ai_score != null ? `<span class="chip brand">AI 估分 ${h.ai_score} / ${h.ai_full}</span>` : h.ai_feedback ? `<span class="chip brand">有 AI 点评</span>` : ""}</summary>
               <div class="c">${esc(h.answer)}</div>
               ${h.ai_feedback ? `<div class="ai-box mt"><b class="small">AI 点评</b><div class="ai-out">${esc(h.ai_feedback)}</div></div>` : ""}</details>`).join("")}
           </div>` : ""}
@@ -175,11 +188,20 @@ export async function render(el, ctx) {
         points: q.points, reference: q.reference, answer: ans.value,
       }),
       onDone: async (text) => {
-        if (lastSaved) {
-          await apiPost("/api/essays/feedback", { id: lastSaved, ai_feedback: text });
-          const m = mine.find((x) => x.id === lastSaved);
-          if (m) m.ai_feedback = text;
+        if (!lastSaved) {
+          // 还没保存就先请 AI 批改：连作答一起存下来，分数才能进走势
+          const r = await apiPost("/api/essays", {
+            set_id: set.id, q_index: qi, answer: ans.value, words: countChars(ans.value),
+            seconds: timerStart ? Math.round((Date.now() - timerStart) / 1000) : 0, self_score: null, checked: [],
+          });
+          lastSaved = r.id;
+          mine.unshift({ id: r.id, set_id: set.id, q_index: qi, answer: ans.value, words: countChars(ans.value),
+            seconds: 0, created_at: new Date().toISOString().replace("T", " "), ai_feedback: "" });
         }
+        const r = await apiPost("/api/essays/feedback", { id: lastSaved, ai_feedback: text });
+        const m = mine.find((x) => x.id === lastSaved);
+        if (m) Object.assign(m, { ai_feedback: text, ai_score: r.ai_score, ai_full: r.ai_full });
+        if (r.ai_score != null) toast(`AI 估分 ${r.ai_score} / ${r.ai_full}，已记入走势`);
       },
     });
   }

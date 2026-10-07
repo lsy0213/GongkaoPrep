@@ -231,6 +231,21 @@ export function jobDoneText(job, okText) {
   return job.error ? "整理出错：" + job.error : okText;
 }
 
+// 分数走势小图：points = [{v: 0–100, tip: 悬停说明}]，target 画一条虚线（可不填）。少于两个点时返回空串
+export function scoreTrend(points, { target = null, label = "目标", max = 100 } = {}) {
+  if (points.length < 2) return "";
+  const W = 560, H = 160, P = 26;
+  const xs = (i) => P + (i * (W - 2 * P)) / (points.length - 1);
+  const ys = (v) => H - P - (Math.min(max, Math.max(0, v)) / max) * (H - 2 * P);
+  const line = points.map((p, i) => `${xs(i).toFixed(1)},${ys(p.v).toFixed(1)}`).join(" ");
+  return `<svg viewBox="0 0 ${W} ${H}" class="trend" role="img" aria-label="分数走势">
+    ${target != null ? `<line x1="${P}" x2="${W - P}" y1="${ys(target)}" y2="${ys(target)}" class="target"/>
+      <text x="${W - P}" y="${ys(target) - 4}" text-anchor="end">${esc(label)} ${target}</text>` : ""}
+    <polyline points="${line}" class="line"/>
+    ${points.map((p, i) => `<circle cx="${xs(i)}" cy="${ys(p.v)}" r="3.5"><title>${esc(p.tip || String(p.v))}</title></circle>`).join("")}
+  </svg>`;
+}
+
 export function fmtBytes(n) {
   n = Number(n) || 0;
   if (n >= 2 ** 30) return (n / 2 ** 30).toFixed(n >= 10 * 2 ** 30 ? 0 : 1) + " GB";

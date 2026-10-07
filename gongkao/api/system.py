@@ -139,6 +139,39 @@ def update_check(ctx):
     }
 
 
+@route("GET", "/api/ai/usage")
+def ai_usage(ctx):
+    """本月 AI 用量：调用次数、输入/输出 tokens、按功能分、估算费用（填了单价才算）、每月上限。"""
+    from ..userdb import today_str
+
+    conn = ctx.conn
+    month = today_str()[:7]
+    rows_ = conn.execute(
+        "SELECT kind, COUNT(*) AS n, COALESCE(SUM(input_tokens),0) AS i, COALESCE(SUM(output_tokens),0) AS o, "
+        "COALESCE(SUM(estimated),0) AS est FROM ai_usage WHERE day >= ? GROUP BY kind ORDER BY n DESC",
+        (month + "-01",)).fetchall()
+    s = get_settings(conn)
+
+    def price(k):
+        try:
+            return float(s.get(k) or "")
+        except ValueError:
+            return None
+
+    pin, pout = price("ai_price_in"), price("ai_price_out")
+    tin = sum(r["i"] for r in rows_)
+    tout = sum(r["o"] for r in rows_)
+    cost = round(tin / 1e6 * pin + tout / 1e6 * pout, 2) if pin is not None and pout is not None else None
+    names = {"essay": "申论批改", "explain": "讲题", "interview": "面试点评", "reader": "资料问答", "lesson": "教程问答",
+             "chat": "自由提问", "test": "测试连接", "followup": "面试追问"}
+    return {
+        "month": month, "calls": sum(r["n"] for r in rows_), "input": tin, "output": tout,
+        "estimated": sum(r["est"] for r in rows_), "cost": cost,
+        "limit": int(float(s.get("ai_monthly_tokens") or 0)),
+        "by_kind": [{"kind": names.get(r["kind"], r["kind"]), "calls": r["n"], "tokens": r["i"] + r["o"]} for r in rows_],
+    }
+
+
 @route("GET", "/api/ai/presets")
 def ai_presets(ctx):
     return ai.PRESETS

@@ -1,4 +1,4 @@
-import { apiGet, apiPost, bankMeta, esc, MODULES, pickQuestions } from "../lib.js";
+import { apiGet, apiPost, bankMeta, esc, MODULES, pickQuestions, scoreTrend } from "../lib.js";
 import { runQuiz } from "../quiz.js";
 
 const REAL = {
@@ -35,17 +35,7 @@ async function compose(plan) {
 
 // 估分走势：每次模考 / 限时练习 / 真题整卷一个点，横线是目标分
 function trendSVG(items, target) {
-  if (items.length < 2) return "";
-  const W = 560, H = 160, P = 26;
-  const xs = (i) => P + (i * (W - 2 * P)) / (items.length - 1);
-  const ys = (v) => H - P - (v / 100) * (H - 2 * P);
-  const pts = items.map((x, i) => `${xs(i).toFixed(1)},${ys(x.score).toFixed(1)}`).join(" ");
-  return `<svg viewBox="0 0 ${W} ${H}" class="trend" role="img" aria-label="估分走势">
-    <line x1="${P}" x2="${W - P}" y1="${ys(target)}" y2="${ys(target)}" class="target"/>
-    <text x="${W - P}" y="${ys(target) - 4}" text-anchor="end" class="small">目标 ${target}</text>
-    <polyline points="${pts}" class="line"/>
-    ${items.map((x, i) => `<circle cx="${xs(i)}" cy="${ys(x.score)}" r="3.5"><title>${esc(x.created_at.slice(5, 16))} ${esc(x.title)}：${x.score} 分</title></circle>`).join("")}
-  </svg>`;
+  return scoreTrend(items.map((x) => ({ v: x.score, tip: `${x.created_at.slice(5, 16)} ${x.title}：${x.score} 分` })), { target, label: "目标" });
 }
 
 export async function render(el) {

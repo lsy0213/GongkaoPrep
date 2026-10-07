@@ -33,8 +33,9 @@ function readFile(input) {
 }
 
 export async function render(el) {
-  const [s, ai, presets, b, job, backups, st] = await Promise.all([apiGet("/api/settings"), getAIStatus(true), apiGet("/api/ai/presets"),
-    bankMeta(true), apiGet("/api/jobs"), apiGet("/api/backups"), apiGet("/api/storage")]);
+  const [s, ai, presets, b, job, backups, st, usage] = await Promise.all([apiGet("/api/settings"), getAIStatus(true), apiGet("/api/ai/presets"),
+    bankMeta(true), apiGet("/api/jobs"), apiGet("/api/backups"), apiGet("/api/storage"), apiGet("/api/ai/usage").catch(() => null)]);
+  const fmtTok = (n) => (n >= 10000 ? (n / 10000).toFixed(n >= 1e6 ? 0 : 1) + " 万" : String(n));
   const aiPreset = presets[ai.provider] || presets.none;
   const c = b.counts, realCount = (c["国考"] || 0) + (c["四川"] || 0);
   const theme = store.get("theme", "system");
@@ -91,6 +92,17 @@ export async function render(el) {
         ${s.ai_key_saved ? `<button class="btn ghost danger" type="button" id="clear-key">清除已保存的 Key</button>` : ""}</div>
       <div id="ai-test-res"></div>
       <p class="small muted">Key 加密后只保存在本机的学习记录里（只有当前 Windows 用户能解开），界面上只显示掩码，导出备份时也不会包含。</p>
+      ${usage ? `<h3 class="mt">本月用量（${esc(usage.month)}）</h3>
+        <p class="small ink2" style="margin-top:0">调用 ${usage.calls} 次 · 输入 ${fmtTok(usage.input)} tokens · 输出 ${fmtTok(usage.output)} tokens
+          ${usage.cost != null ? ` · 估算费用约 <b>${usage.cost}</b> 元` : ""}${usage.limit ? ` · 上限 ${fmtTok(usage.limit)}（已用 ${Math.round(((usage.input + usage.output) / usage.limit) * 100)}%）` : ""}
+          ${usage.estimated ? `<br><span class="muted">其中 ${usage.estimated} 次服务商没返回用量，按字数估算。</span>` : ""}</p>
+        ${usage.by_kind.length ? `<p class="small muted" style="margin:0">${usage.by_kind.map((k) => `${esc(k.kind)} ${k.calls} 次`).join(" · ")}</p>` : ""}` : ""}
+      <div class="grid cols-3 mt">
+        <label class="field">每月 token 上限（0 = 不限）<input type="number" id="ai_monthly_tokens" min="0" step="10000" value="${esc(s.ai_monthly_tokens)}"></label>
+        <label class="field">输入单价（元 / 百万 tokens）<input type="number" id="ai_price_in" min="0" step="0.01" value="${esc(s.ai_price_in)}" placeholder="按服务商价目表填"></label>
+        <label class="field">输出单价（元 / 百万 tokens）<input type="number" id="ai_price_out" min="0" step="0.01" value="${esc(s.ai_price_out)}" placeholder="可不填"></label>
+      </div>
+      <p class="small muted">单价以服务商官网价目表为准；填了就按用量估算费用。到了上限后 AI 功能暂停，下个月自动恢复。</p>
       <details class="small muted"><summary style="cursor:pointer">怎么获取 API Key？</summary>
         <ul style="line-height:1.9">
           <li><b>DeepSeek</b>：platform.deepseek.com → API Keys（便宜、中文好，推荐）</li>
@@ -282,6 +294,8 @@ export async function render(el) {
   const saveAI = () => apiPost("/api/settings", {
     ai_provider: prov.value, ai_model: model.value.trim(), ai_base_url: base.value.trim(),
     ai_api_key: aiForm.querySelector("#ai_api_key").value.trim(),
+    ai_monthly_tokens: aiForm.querySelector("#ai_monthly_tokens").value || "0",
+    ai_price_in: aiForm.querySelector("#ai_price_in").value, ai_price_out: aiForm.querySelector("#ai_price_out").value,
   });
   aiForm.onsubmit = async (e) => {
     e.preventDefault();
