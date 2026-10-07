@@ -159,6 +159,14 @@ def _v5_interview_audio(conn):
                                       ("transcript", "TEXT DEFAULT ''")])
 
 
+def _v6_qfixes(conn):
+    """自己改过的题目（OCR 错字、答案错了）：存在学习记录里，重新整理资料也不会丢，取题时盖在原题上。"""
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS qfixes (
+        qid TEXT PRIMARY KEY, stem TEXT, options TEXT, answer INTEGER, explain TEXT, note TEXT, updated_at TEXT);
+    """)
+
+
 # (版本号, 说明, 执行函数)。只能往后追加，不要改已有的步骤。
 MIGRATIONS = [
     (1, "初始表结构", lambda c: c.executescript(SCHEMA_V1)),
@@ -166,6 +174,7 @@ MIGRATIONS = [
     (3, "闪卡、错题本改用 FSRS", _v3_fsrs),
     (4, "AI 用量记录、申论 AI 估分", _v4_ai),
     (5, "面试录音与语音指标", _v5_interview_audio),
+    (6, "题目纠错", _v6_qfixes),
 ]
 
 
@@ -355,7 +364,7 @@ USER_TABLES = [
     "settings", "sessions", "attempts", "wrongbook", "favorites", "qnotes", "tasks",
     "checkins", "study_logs", "essays", "interviews", "notebook", "cards",
     "speed_records", "reading_logs", "chats", "prefs", "lib_progress", "doc_progress", "doc_marks",
-    "doc_quiz", "memo_books", "memo_items", "ai_usage",
+    "doc_quiz", "memo_books", "memo_items", "ai_usage", "qfixes",
 ]
 
 

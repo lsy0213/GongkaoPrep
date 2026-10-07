@@ -117,7 +117,69 @@ def bank_pick(ctx):
 
 @route("POST", "/api/bank/get", write=False)
 def bank_get(ctx):
-    return bank().get([str(i) for i in ctx.body.get("ids") or []])
+    res = bank().get([str(i) for i in ctx.body.get("ids") or []])
+    apply_fixes(ctx.conn, res["questions"])
+    return res
+
+
+# ---------------------------------------------------------------- 题目纠错
+
+def apply_fixes(conn, questions):
+    """把自己改过的题干、选项、答案、解析盖到取出的题上（原题留在 orig 里，界面可以对照）。"""
+    if not questions:
+        return
+    ids = [q["id"] for q in questions]
+    fixes = {}
+    for k in range(0, len(ids), 500):
+        chunk = ids[k:k + 500]
+        for r in conn.execute(f"SELECT * FROM qfixes WHERE qid IN ({','.join('?' * len(chunk))})", chunk):
+            fixes[r["qid"]] = r
+    for i, q in enumerate(questions):
+        f = fixes.get(q["id"])
+        if not f:
+            continue
+        q = questions[i] = dict(q)  # 内置题是内存里的共享对象，不能直接改
+        orig = {}
+        if f["stem"] is not None:
+            orig["stem"], q["stem"] = q.get("stem"), f["stem"]
+        if f["options"] is not None:
+            orig["options"], q["options"] = q.get("options"), json.loads(f["options"])
+        if f["answer"] is not None:
+            orig["answer"], q["answer"] = q.get("answer"), f["answer"]
+        if f["explain"] is not None:
+            orig["explain"], q["explain"] = q.get("explain"), f["explain"]
+        q["fixed"] = {"note": f["note"] or "", "updated_at": f["updated_at"], "orig": orig}
+
+
+@route("POST", "/api/qfix")
+def qfix_save(ctx):
+    """保存对一道题的修改：只传要改的字段；answer 0–3。"""
+    b = ctx.body
+    qid = str(b["qid"])
+    opts = b.get("options")
+    if opts is not None and (not isinstance(opts, list) or not 2 <= len(opts) <= 6):
+        raise ValueError("选项要有 2–6 个")
+    ans = b.get("answer")
+    if ans is not None and ans not in (0, 1, 2, 3, 4, 5):
+        raise ValueError("答案不对")
+    ctx.conn.execute(
+        "INSERT OR REPLACE INTO qfixes(qid, stem, options, answer, explain, note, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (qid, b.get("stem"), json.dumps(opts, ensure_ascii=False) if opts is not None else None, ans, b.get("explain"),
+         b.get("note") or "", now_str()))
+    res = bank().get([qid])
+    apply_fixes(ctx.conn, res["questions"])
+    return {"ok": True, "question": res["questions"][0] if res["questions"] else None}
+
+
+@route("POST", "/api/qfix/delete")
+def qfix_delete(ctx):
+    ctx.conn.execute("DELETE FROM qfixes WHERE qid=?", (str(ctx.body["qid"]),))
+    return {"ok": True}
+
+
+@route("GET", "/api/qfix")
+def qfix_list(ctx):
+    return {"items": rows(ctx.conn, "SELECT * FROM qfixes ORDER BY updated_at DESC")}
 
 
 @route("POST", "/api/bank/import")

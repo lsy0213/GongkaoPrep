@@ -149,6 +149,7 @@ export async function runQuiz(el, { title, ids, mode = "practice", timeLimit = 0
         <span class="chip brand">${esc(q.module)}</span>${q.sub ? `<span class="chip">${esc(q.sub)}</span>` : ""}
         ${q.real ? `<span class="chip" title="${esc(paper ? paper.title : "")}">${esc(srcLabel(q))}${paper && paper.level ? " · " + esc(paper.level) : ""} · 第 ${q.num} 题</span>` : ""}
         ${q.custom ? `<span class="chip">导入</span>` : ""}
+        ${q.fixed ? `<span class="chip warn" title="${esc(q.fixed.note || "你改过这道题")}">已纠错</span>` : ""}
         ${hist ? `<span class="small muted">做过 ${hist.n} 次，对 ${hist.ok || 0} 次</span>` : `<span class="small muted">新题</span>`}
         ${wrong && !wrong.mastered ? `<span class="chip bad">错题本</span>` : ""}
         <span class="spacer"></span>
@@ -169,7 +170,9 @@ export async function runQuiz(el, { title, ids, mode = "practice", timeLimit = 0
         <div class="row"><span class="verdict ${a === q.answer ? "ok" : "no"}">${a == null ? "未作答" : a === q.answer ? "回答正确" : "回答错误"}</span>
           <span class="ink2">正确答案 <b>${LETTERS[q.answer]}</b>${a != null && a !== q.answer ? `，你选了 ${LETTERS[a]}` : ""}</span>
           <span class="spacer"></span>
+          <button class="btn sm ghost" data-fix title="题干、选项、答案或解析有错，自己改正（只改你本机的题库）">纠错</button>
           <button class="btn sm" data-fav>${st.favorites.has(q.id) ? "已收藏" : "收藏"}</button></div>
+        ${st.fixing === q.id ? fixEditor(q) : ""}
         <div class="explain-text">${q.explain ? esc(q.explain) : "这道题没有解析。"}</div>
         <details class="mt" ${st.notes[q.id] ? "open" : ""}><summary class="small ink2" style="cursor:pointer">我的笔记</summary>
           <textarea id="qnote" rows="2" class="mt" placeholder="写下这道题的要点或错因">${esc(st.notes[q.id] || "")}</textarea>
@@ -181,6 +184,32 @@ export async function runQuiz(el, { title, ids, mode = "practice", timeLimit = 0
         <button class="btn ${show || mode === "exam" ? "primary" : ""}" data-next ${st.idx === qs.length - 1 ? "disabled" : ""}>下一题</button>
       </div>
     </div>`;
+  }
+
+  // 纠错：改题干、选项、答案、解析，存在本机学习记录里，以后取这道题都用改过的
+  function fixEditor(q) {
+    const opts = q.options || ["", "", "", ""];
+    return `<div class="ai-box mt" id="fix-box"><b class="small">纠错（只改你本机的题库，重新整理资料也会保留）</b>
+      <label class="field mt">题干<textarea id="fx-stem" rows="4">${esc(q.stem || "")}</textarea></label>
+      ${opts.map((o, k) => `<label class="field">选项 ${LETTERS[k]}<input type="text" data-fx-opt="${k}" value="${esc(o)}"></label>`).join("")}
+      <label class="field">正确答案<select id="fx-ans">${opts.map((_o, k) => `<option value="${k}" ${k === q.answer ? "selected" : ""}>${LETTERS[k]}</option>`).join("")}</select></label>
+      <label class="field">解析<textarea id="fx-exp" rows="4">${esc(q.explain || "")}</textarea></label>
+      <label class="field">备注（改了什么、依据）<input type="text" id="fx-note" value="${esc(q.fixed?.note || "")}" placeholder="例如：OCR 把“己”识别成了“已”；答案按官方解析改为 C"></label>
+      <div class="row"><button class="btn sm primary" data-fx-save>保存修改</button><button class="btn sm ghost" data-fx-cancel>取消</button>
+        ${q.fixed ? `<span class="spacer"></span><button class="btn sm ghost danger" data-fx-reset>恢复原题</button>` : ""}</div></div>`;
+  }
+
+  async function saveFix(q) {
+    const body = {
+      qid: q.id, note: el.querySelector("#fx-note").value.trim(), answer: +el.querySelector("#fx-ans").value,
+      stem: el.querySelector("#fx-stem").value, explain: el.querySelector("#fx-exp").value,
+    };
+    if (q.options) body.options = [...el.querySelectorAll("[data-fx-opt]")].map((x) => x.value.trim());
+    const r = await apiPost("/api/qfix", body);
+    if (r.question) Object.assign(q, r.question);
+    st.fixing = null;
+    toast("已保存修改；做题判分、错题本都按改过的算");
+    draw();
   }
 
   function draw() {
@@ -215,6 +244,22 @@ export async function runQuiz(el, { title, ids, mode = "practice", timeLimit = 0
       await apiPost("/api/favorite", { qid: id, on });
       on ? st.favorites.add(id) : st.favorites.delete(id);
       toast(on ? "已收藏，可在错题本的“收藏”里找到" : "已取消收藏");
+      draw();
+    };
+    const fx = el.querySelector("[data-fix]");
+    if (fx) fx.onclick = () => { st.fixing = st.fixing === qs[st.idx].id ? null : qs[st.idx].id; draw(); };
+    const fxSave = el.querySelector("[data-fx-save]");
+    if (fxSave) fxSave.onclick = () => saveFix(qs[st.idx]).catch((e) => toast(e.message, 4000));
+    const fxCancel = el.querySelector("[data-fx-cancel]");
+    if (fxCancel) fxCancel.onclick = () => { st.fixing = null; draw(); };
+    const fxReset = el.querySelector("[data-fx-reset]");
+    if (fxReset) fxReset.onclick = async () => {
+      const q = qs[st.idx];
+      await apiPost("/api/qfix/delete", { qid: q.id });
+      Object.assign(q, q.fixed.orig);
+      delete q.fixed;
+      st.fixing = null;
+      toast("已恢复原题");
       draw();
     };
     const note = el.querySelector("[data-note]");
