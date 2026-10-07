@@ -734,6 +734,7 @@ svg.chart .dot { fill: var(--brand); }
 .viewer .pages { flex: 1; overflow: auto; background: var(--surface-2); padding: 12px; border: 1px solid var(--line); }
 .viewer .pages img { display: block; max-width: 100%; margin: 0 auto 12px; background: #fff; box-shadow: var(--shadow); }
 .job-box { border: 1px dashed var(--rule); padding: 12px 16px; background: var(--surface-2); }
+.draft-bar { border-left: 4px solid var(--warn); background: var(--warn-soft); padding: 12px 16px; margin-bottom: 16px; }
 
 /* ---------- 系统教程 ---------- */
 /* 继续学习：一张横条，左文右按钮，底部总进度 */

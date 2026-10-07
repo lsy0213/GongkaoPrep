@@ -1,16 +1,41 @@
 // 做题引擎：练习模式（选完立即看解析）、考试模式（交卷后看结果）、复习模式（错题重做）
-import { apiGet, apiPost, cropHTML, getQuestions, esc, fmtClock, LETTERS, md, MODULES, MODULE_SHORT, mountAIBox, needsCrop, srcLabel, toast } from "./lib.js";
+import { apiGet, apiPost, cropHTML, getQuestions, esc, fmtClock, LETTERS, md, MODULES, MODULE_SHORT, mountAIBox, needsCrop, srcLabel, store, toast } from "./lib.js";
 import { refreshBadge } from "./app.js";
 
 const MODE_NAME = { practice: "练习", exam: "模考", review: "错题复习" };
 
-export async function runQuiz(el, { title, ids, mode = "practice", timeLimit = 0, onAgain = null }) {
+// 做到一半的题（窗口关了、软件崩了、误点了别的页面）：每次作答、翻页和每 15 秒存一次，下次可以接着做
+const DRAFT_KEY = "quiz-draft";
+
+export function quizDraft() {
+  const d = store.get(DRAFT_KEY, null);
+  return d && Array.isArray(d.ids) && d.ids.length ? d : null;
+}
+
+export function dropQuizDraft() {
+  store.set(DRAFT_KEY, null);
+}
+
+// 页面顶部的“继续上次没做完的题”提示条（app.js 在每个页面渲染后调用）
+export function draftBannerHTML() {
+  const d = quizDraft();
+  if (!d) return "";
+  const done = Object.keys(d.answers || {}).length;
+  const left = d.timeLimit ? Math.max(0, d.timeLimit - d.elapsed) : 0;
+  return `<div class="card draft-bar" id="draft-bar"><div class="row">
+    <span>📝 <b>${esc(d.title)}</b> 还没做完：已答 ${done}/${d.ids.length} 题${d.timeLimit ? `，剩余 ${fmtClock(left)}（关闭期间不计时）` : ""}，存于 ${esc((d.savedAt || "").slice(5, 16))}</span>
+    <span class="spacer"></span><a class="btn sm primary" href="#/resume">继续做</a>
+    <button class="btn sm ghost" data-draft-drop>放弃</button></div></div>`;
+}
+
+export async function runQuiz(el, { title, ids, mode = "practice", timeLimit = 0, onAgain = null, resume = null }) {
   const data = await getQuestions(ids);
   const progress = await apiGet("/api/progress");
   // 没有答案的真题（答案文件是扫描件等）不能判分，不出
   const qs = data.questions.filter((q) => q.answer != null);
   if (!qs.length) {
     el.innerHTML = `<div class="card empty"><h3>没有可做的题</h3><p>换个条件试试。</p></div>`;
+    if (resume) dropQuizDraft();
     return () => {};
   }
   const st = {
@@ -18,9 +43,30 @@ export async function runQuiz(el, { title, ids, mode = "practice", timeLimit = 0
     finished: false, favorites: new Set(progress.favorites), notes: progress.notes,
     crop: {}, // 每题手动切换“原卷 / 文字”
   };
+  if (resume) {
+    Object.assign(st, {
+      idx: Math.min(resume.idx || 0, qs.length - 1), answers: resume.answers || {}, revealed: resume.revealed || {},
+      flags: resume.flags || {}, spent: resume.spent || {}, start: Date.now() - (resume.elapsed || 0) * 1000,
+    });
+  }
   const instant = mode !== "exam";
   let clock = null;
   let keyHandler = null;
+  let lastSave = 0;
+
+  function saveDraft(force = false) {
+    if (st.finished) return;
+    if (!force && Date.now() - lastSave < 1000) return;
+    if (!Object.keys(st.answers).length && !resume) return; // 还一题没答，不算“做了一半”
+    lastSave = Date.now();
+    const spent = { ...st.spent };
+    const cur = qs[st.idx];
+    spent[cur.id] = (spent[cur.id] || 0) + (Date.now() - st.lastSwitch) / 1000;
+    store.set(DRAFT_KEY, {
+      title, ids, mode, timeLimit, idx: st.idx, answers: st.answers, revealed: st.revealed, flags: st.flags, spent,
+      elapsed: Math.round(elapsed()), savedAt: new Date().toLocaleString("sv").replace("T", " "),
+    });
+  }
 
   function account() {
     const q = qs[st.idx];
@@ -34,6 +80,7 @@ export async function runQuiz(el, { title, ids, mode = "practice", timeLimit = 0
     account();
     st.idx = i;
     draw();
+    saveDraft(true);
   }
 
   function choose(k) {
@@ -43,6 +90,7 @@ export async function runQuiz(el, { title, ids, mode = "practice", timeLimit = 0
     st.answers[q.id] = k;
     if (instant) st.revealed[q.id] = true;
     draw();
+    saveDraft(true);
     if (!instant && st.idx < qs.length - 1) setTimeout(() => go(st.idx + 1), 180);
   }
 
@@ -156,7 +204,7 @@ export async function runQuiz(el, { title, ids, mode = "practice", timeLimit = 0
     const cropBtn = el.querySelector("[data-crop]");
     if (cropBtn) cropBtn.onclick = () => { const q = qs[st.idx]; st.crop[q.id] = !showCrop(q); draw(); };
     const flag = el.querySelector("[data-flag]");
-    if (flag) flag.onclick = () => { const id = qs[st.idx].id; st.flags[id] = !st.flags[id]; draw(); };
+    if (flag) flag.onclick = () => { const id = qs[st.idx].id; st.flags[id] = !st.flags[id]; draw(); saveDraft(true); };
     const fin = el.querySelector("[data-finish]");
     if (fin) fin.onclick = () => confirmFinish(fin);
     const res = el.querySelector("[data-result]");
@@ -204,6 +252,7 @@ export async function runQuiz(el, { title, ids, mode = "practice", timeLimit = 0
     account();
     st.finished = true;
     clearInterval(clock);
+    dropQuizDraft();
     const duration = Math.round(elapsed());
     const items = qs
       .filter((q) => mode === "exam" || st.answers[q.id] != null)
@@ -266,6 +315,7 @@ export async function runQuiz(el, { title, ids, mode = "practice", timeLimit = 0
   }
 
   clock = setInterval(() => {
+    if (!st.finished && Date.now() - lastSave > 15000) saveDraft(true);
     const c = document.getElementById("clock");
     if (!c || st.finished) return;
     if (timeLimit) {
@@ -286,10 +336,20 @@ export async function runQuiz(el, { title, ids, mode = "practice", timeLimit = 0
   };
   document.addEventListener("keydown", keyHandler);
 
-  draw();
+  // 继续上次的题：限时的如果时间已经用完，直接交卷
+  if (resume && timeLimit && timeLimit - elapsed() <= 0) {
+    toast("时间已用完，已自动交卷");
+    finish();
+  } else {
+    draw();
+  }
+  const onUnload = () => { saveDraft(true); store.flushNow(true); };
+  window.addEventListener("beforeunload", onUnload);
   return () => {
+    saveDraft(true);
     clearInterval(clock);
     document.removeEventListener("keydown", keyHandler);
+    window.removeEventListener("beforeunload", onUnload);
   };
 }
 

@@ -140,9 +140,15 @@ let flushTimer = null;
 export async function initStore() {
   try { Object.assign(prefs, await apiGet("/api/prefs")); } catch { /* 读不到就用默认值 */ }
 }
-function flush() {
+function flush(unloading = false) {
   const body = { ...pending };
   for (const k of Object.keys(pending)) delete pending[k];
+  if (unloading) {
+    // 关窗口时普通请求会被取消；keepalive 的请求浏览器会在后台发完
+    fetch("/api/prefs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), keepalive: true })
+      .catch(() => {});
+    return;
+  }
   apiPost("/api/prefs", body).catch(() => {});
 }
 export const store = {
@@ -155,8 +161,13 @@ export const store = {
     clearTimeout(flushTimer);
     flushTimer = setTimeout(flush, 400);
   },
+  // 立刻写入（关窗口前用）
+  flushNow(unloading = false) {
+    clearTimeout(flushTimer);
+    if (Object.keys(pending).length) flush(unloading);
+  },
 };
-window.addEventListener("beforeunload", () => { if (Object.keys(pending).length) flush(); });
+window.addEventListener("beforeunload", () => { if (Object.keys(pending).length) { clearTimeout(flushTimer); flush(true); } });
 
 // 导出文件：桌面窗口里弹“另存为”，浏览器里走下载
 export async function saveFile(filename, text) {
