@@ -57,6 +57,9 @@ jobs:
           python-version: "3.11"
       - run: python -m pip install -r requirements.txt -r requirements-dev.txt
       - run: python -m PyInstaller --noconfirm --clean GongkaoPrep.spec
+      - run: python tools/smoke_exe.py
+        env:
+          PYTHONIOENCODING: utf-8
       - run: Compress-Archive -Path dist/GongkaoPrep/* -DestinationPath GongkaoPrep-${{ github.ref_name }}.zip
         shell: pwsh
       - uses: actions/upload-artifact@v4
