@@ -24,6 +24,7 @@ echo 版本 %VER%
 
 echo [3/4] 开始打包，大约需要 1-2 分钟...
 conda run --no-capture-output -n gongkao-prep python -m PyInstaller --noconfirm --clean GongkaoPrep.spec || goto :error
+conda run --no-capture-output -n gongkao-prep python tools\smoke_exe.py || goto :error
 
 echo [4/4] 生成安装包...
 set ISCC=

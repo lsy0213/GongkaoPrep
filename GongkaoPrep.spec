@@ -1,8 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
 # 打包配置（build.bat 调用）：onedir 目录版——启动快（不用每次解压到临时目录），也不容易被杀毒软件误报。
 # 输出 dist\GongkaoPrep\GongkaoPrep.exe；装了 Inno Setup 时 build.bat 再做成安装包。
+import os
 import re
+import sys
 from pathlib import Path
+
+# conda 环境的 DLL（libexpat 等）在 Library\bin。没有先 conda activate 就直接用环境里的 python 打包时，
+# PATH 里排在前面的可能是 base 环境的同名 DLL，版本对不上，打出来的 exe 里 pyexpat 加载失败（读不了 xlsx）。
+_lib_bin = Path(sys.prefix) / "Library" / "bin"
+if _lib_bin.is_dir():
+    os.environ["PATH"] = str(_lib_bin) + os.pathsep + os.environ.get("PATH", "")
 
 from PyInstaller.utils.hooks import collect_all, collect_data_files
 from PyInstaller.utils.win32.versioninfo import (FixedFileInfo, StringFileInfo, StringStruct, StringTable,
