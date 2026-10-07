@@ -75,8 +75,11 @@ export async function render(el) {
           ${tab !== "fav" ? `<div class="seg mb" id="mods">${["全部", ...MODULES].map((m) => `<button data-m="${esc(m)}" class="${mod === m ? "active" : ""}">${esc(MODULE_SHORT[m] || m)}</button>`).join("")}</div>` : ""}
           ${xs.length ? xs.map(itemHTML).join("") : `<div class="empty"><h3>${tab === "due" ? "今天没有需要复习的错题" : "这里还是空的"}</h3>
             <p>${tab === "fav" ? "做题时点“收藏”可以把好题收进来。" : "去 <a href='#/practice'>刷题</a> 吧，做错的题会自动收进来。"}</p></div>`}
-          ${tab !== "due" && tab !== "fav" && xs.length ? `<div class="row mt"><button class="btn" id="redo">把这 ${xs.length} 题再做一遍</button></div>` : ""}
-          ${tab === "fav" && xs.length ? `<div class="row mt"><button class="btn" id="redo">练习收藏的题</button></div>` : ""}
+          ${xs.length ? `<div class="row mt">
+            ${tab !== "due" ? `<button class="btn" id="redo">${tab === "fav" ? "练习收藏的题" : `把这 ${xs.length} 题再做一遍`}</button>` : ""}
+            <span class="spacer"></span>
+            <label class="small row" style="gap:4px"><input type="checkbox" id="ans-last" checked> 答案放最后（先自测）</label>
+            <button class="btn ghost" id="print">导出打印（${xs.length} 题）</button></div>` : ""}
         </div>
         <div class="stack" style="gap:16px">
           <div class="card"><h3 class="mb">错因统计</h3>${reasonStats()}</div>
@@ -119,6 +122,44 @@ export async function render(el) {
     if (rv) rv.onclick = () => startQuiz(due.map((x) => x.qid), `今日错题复习 · ${due.length} 题`, "review");
     const redo = el.querySelector("#redo");
     if (redo) redo.onclick = () => startQuiz(xs.map((x) => x.qid), tab === "fav" ? "收藏题练习" : "错题重做", "practice");
+    const pr = el.querySelector("#print");
+    if (pr) pr.onclick = () => printList(xs, el.querySelector("#ans-last").checked);
+  }
+
+  // 打印版：题干、选项、原卷截图、我的错因和笔记；答案解析跟在每题后面或集中放在最后。用打印对话框“另存为 PDF”
+  function printList(xs, ansLast) {
+    const tabName = { due: "今日待复习", all: "未掌握", done: "已掌握", fav: "收藏" }[tab];
+    const qs = groupIds(xs.map((x) => x.qid)).map((id) => b.byId[id]).filter(Boolean);
+    const info = Object.fromEntries(items.map((x) => [x.qid, x]));
+    const seenMat = new Set();
+    const ans = (q, i) => `<div class="pr-ans"><b>${i + 1}. 答案 ${LETTERS[q.answer] ?? "—"}</b>
+      ${q.explain ? `<div>${esc(q.explain)}</div>` : ""}
+      ${progress.notes[q.id] ? `<div class="pr-note">我的笔记：${esc(progress.notes[q.id])}</div>` : ""}</div>`;
+    const body = qs.map((q, i) => {
+      const x = info[q.id] || {};
+      let mat = "";
+      if (q.material && !seenMat.has(q.material)) {
+        seenMat.add(q.material);
+        const m = data.mat(q.material);
+        if (m) mat = `<div class="pr-mat"><b>${esc(m.title || "材料")}</b>${m.crop && m.fig ? cropHTML(m.crop, m.fid) : `<div>${md(m.text || "")}</div>`}</div>`;
+      }
+      return `${mat}<div class="pr-q">
+        <div class="pr-head">${i + 1}. <span class="muted">${esc(MODULE_SHORT[q.module] || q.module)}${q.real ? " · " + esc(srcLabel(q)) + " 第 " + q.num + " 题" : ""}
+          ${x.wrong_count ? ` · 错 ${x.wrong_count} 次` : ""}${x.reason ? ` · 错因：${esc(x.reason)}` : ""}</span></div>
+        ${needsCrop(q) ? cropHTML(q.crop, q.fid) : `<div class="pr-stem">${esc(q.stem)}</div>`}
+        ${q.options ? `<div class="pr-opts">${q.options.map((o, k) => `<div>${LETTERS[k]}. ${esc(o)}</div>`).join("")}</div>` : ""}
+        ${ansLast ? "" : ans(q, i)}</div>`;
+    }).join("");
+    const html = `<div class="print-sheet">
+      <div class="no-print row mb"><button class="btn primary" id="do-print">打印 / 另存为 PDF</button><button class="btn" id="back">返回错题本</button>
+        <span class="small muted">打印对话框里把“目标打印机”选成“另存为 PDF”就能得到 PDF 文件</span></div>
+      <h1>错题本 · ${esc(tabName)}${mod !== "全部" ? " · " + esc(mod) : ""}</h1>
+      <p class="small muted">共 ${qs.length} 题 · ${new Date().toLocaleDateString("zh-CN")} 导出</p>
+      ${body}
+      ${ansLast ? `<h2 class="pr-break">答案与解析</h2>${qs.map(ans).join("")}` : ""}</div>`;
+    el.innerHTML = html;
+    el.querySelector("#do-print").onclick = () => window.print();
+    el.querySelector("#back").onclick = () => draw();
   }
 
   // 同一材料的题挨在一起

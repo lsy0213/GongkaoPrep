@@ -1341,3 +1341,23 @@ mark.cy-w { background: var(--warn-soft); color: var(--accent); font-weight: 600
   .news-row > :nth-child(n+3) { display: none; }
   .cy-def { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 }
+
+/* ---------- 错题本打印版 ---------- */
+.print-sheet { max-width: 820px; }
+.print-sheet h1 { font-size: 24px; margin-bottom: 4px; }
+.pr-q, .pr-mat { padding: 10px 0 12px; border-bottom: 1px dashed var(--line); break-inside: avoid; }
+.pr-head { font-weight: 600; margin-bottom: 4px; }
+.pr-stem { white-space: pre-wrap; line-height: 1.8; }
+.pr-opts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 18px; margin-top: 6px; }
+.pr-ans { margin-top: 8px; padding: 6px 10px; background: var(--surface-2); font-size: 14px; line-height: 1.7; break-inside: avoid; }
+.pr-note { color: var(--ink-2); }
+.pr-mat img, .pr-q img { max-width: 100%; }
+@media print {
+  .sidebar, .mobile-menu, .nav-scrim, .skin-deco, .toast, .no-print, .draft-bar { display: none !important; }
+  #app { display: block; height: auto; overflow: visible; }
+  #view { overflow: visible; padding: 0; }
+  body { background: #fff !important; color: #000 !important; }
+  .print-sheet { max-width: none; }
+  .pr-ans { background: #f3f3f3; }
+  .pr-break { break-before: page; }
+}
