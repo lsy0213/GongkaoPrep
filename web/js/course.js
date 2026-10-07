@@ -109,7 +109,7 @@ export function renderParts(parts, ctx) {
     if (p.type === "md") return md(p.body);
     const r = BLOCKS[p.type];
     if (!r) return `<div class="blk blk-unknown small muted">（不认识的块：${esc(p.type)}）</div>`;
-    return `<div class="blk blk-${p.type}" data-b="${b}">${r.html(p, b, ctx)}</div>`;
+    return `<div class="blk blk-${esc(p.type)}" data-b="${b}">${r.html(p, b, ctx)}</div>`;
   }).join("\n");
 }
 

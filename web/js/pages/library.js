@@ -183,7 +183,7 @@ export async function render(el, ctx) {
     for (const [g, subs] of data.groups) {
       if (!count(`g:${g}`)) continue;
       h += navBtn(`g:${g}`, GROUP_LABEL[g], "grp");
-      for (const s of subs) if (count(`s:${g}/${s}`)) h += navBtn(`s:${g}/${s}`, s, "subitem");
+      for (const s of subs) if (count(`s:${g}/${s}`)) h += navBtn(`s:${g}/${s}`, esc(s), "subitem");
     }
     h += `<h4>我的</h4>` + MINE.map((m) => navBtn(`m:${m}`, m === "标注" ? "我的标注" : m)).join("");
     return h;

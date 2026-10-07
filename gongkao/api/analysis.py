@@ -42,7 +42,7 @@ def analysis(ctx):
             t["timed"] += 1
         t["recent"] = (t["recent"] + [a["correct"] or 0])[-20:]
     available = {}
-    for qid, tid in tmap.items():
+    for _qid, tid in tmap.items():
         available[tid] = available.get(tid, 0) + 1
     topic_rows = []
     for tp in topics.all_topics():

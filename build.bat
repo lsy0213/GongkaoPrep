@@ -12,7 +12,9 @@ if not exist assets\icon.ico (
     conda run -n gongkao-prep python tools\make_icon.py || goto :error
 )
 
-echo [2/4] 运行测试...
+echo [2/4] 检查与测试...
+conda run --no-capture-output -n gongkao-prep python -m ruff check . || goto :error
+conda run --no-capture-output -n gongkao-prep python tools\check_frontend.py || goto :error
 conda run --no-capture-output -n gongkao-prep python -m pytest -q || goto :error
 
 for /f "tokens=2 delims==" %%v in ('findstr /r /c:"^VERSION = " gongkao\__init__.py') do set VER=%%~v

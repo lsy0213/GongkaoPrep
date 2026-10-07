@@ -420,7 +420,7 @@ def parse_paper(path):
         # 题目后面的内容：大题标题、说明、下一组题的共用材料
         mat_lines = []
         instructions_mode = False
-        for k, r in enumerate(tail):
+        for r in tail:
             mod, sb = section_at(line_pos[id(r)]) if tail_start is not None else (None, None)
             if mod:
                 if mod != module:
@@ -915,7 +915,7 @@ def build_all(root, progress=None):
         if r:
             built.setdefault(r[0]["id"], []).append(r)
     papers, questions, materials = [], [], []
-    for pid, versions in built.items():
+    for _pid, versions in built.items():
         # 同一份卷子在不同文件夹里有多份：以题目最全、答案最多的为准，缺的答案从其他版本按题干补
         versions.sort(key=lambda r: (r[0]["answered"], r[0]["count"]), reverse=True)
         paper, qs, ms = versions[0]

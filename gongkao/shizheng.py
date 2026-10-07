@@ -1633,7 +1633,7 @@ def parse_chengyu(raw_lines):
     marks += [(m.start(), m.end(), "w", m) for m in WORD_RE.finditer(text)]
     marks.sort(key=lambda x: x[0])
     words, sents = [], []
-    for i, (a, z, kind, m) in enumerate(marks):
+    for i, (_a, z, kind, m) in enumerate(marks):
         end = marks[i + 1][0] if i + 1 < len(marks) else len(text)
         seg = re.sub(r"\s*\n\s*", "", text[z:end]).strip()
         if kind == "w":

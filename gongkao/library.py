@@ -406,7 +406,7 @@ def render_png(path, page, clip=None, zoom=2.0):
     import pymupdf
 
     pymupdf.TOOLS.mupdf_display_errors(False)
-    key = hashlib.md5(f"{path}|{os.path.getmtime(path)}|{page}|{clip}|{zoom}".encode("utf-8")).hexdigest()
+    key = hashlib.md5(f"{path}|{os.path.getmtime(path)}|{page}|{clip}|{zoom}".encode()).hexdigest()
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cached = CACHE_DIR / (key + ".png")
     if cached.exists():

@@ -363,7 +363,7 @@ def parse_explains(lines):
     groups = []
     cur = None
     last = 0
-    for pno, ln in lines:
+    for _pno, ln in lines:
         t = _clean(ln.text)
         if not t:
             continue

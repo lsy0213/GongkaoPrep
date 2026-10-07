@@ -181,7 +181,7 @@ class Handler(BaseHTTPRequestHandler):
     def send_html_message(self, title, text, status=200, cookie=""):
         body = (f"<!doctype html><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
                 f"<title>{title}</title><body style='font:16px/1.7 sans-serif;padding:32px;max-width:520px;margin:auto'>"
-                f"<h2>{title}</h2><p>{text}</p></body>").encode("utf-8")
+                f"<h2>{title}</h2><p>{text}</p></body>").encode()
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))

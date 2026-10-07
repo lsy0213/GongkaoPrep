@@ -1076,7 +1076,7 @@ def _load_bank():
     if not path.exists():
         return _bank
     conn = sqlite3.connect(path)
-    for qid, stem, opts, ans, exp, origin, src, source, module in conn.execute(
+    for qid, stem, opts, ans, exp, origin, src, _source, module in conn.execute(
             "SELECT id, stem, options, answer, explain, origin, src, source, module FROM questions "
             "WHERE answer IS NOT NULL AND answer != '' AND answer >= 0"):
         k = _bkey(stem)

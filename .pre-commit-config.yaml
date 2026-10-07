@@ -1,0 +1,28 @@
+# 提交前自动检查：pip install pre-commit && pre-commit install
+# 用的是当前环境里装好的 ruff / pytest（requirements-dev.txt），不另外下载
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff
+        entry: python -m ruff check
+        language: system
+        types: [python]
+      - id: frontend
+        name: 前端检查（JS 语法、漏转义）
+        entry: python tools/check_frontend.py
+        language: system
+        files: ^web/js/
+        pass_filenames: false
+      - id: course
+        name: 教程格式检查
+        entry: python tools/check_course.py
+        language: system
+        files: ^content/course/
+        pass_filenames: false
+      - id: pytest
+        name: 测试
+        entry: python -m pytest -q
+        language: system
+        types: [python]
+        pass_filenames: false

@@ -1328,7 +1328,7 @@ def _apply_outline(blocks, toc):
         # 资料自带的目录页（一页上列着好几条书签标题）：去掉，从正文里找标题
         cores = [c for c in (_core(t[1], True) for t in toc) if c]
         per_page = defaultdict(set)
-        for i, b in enumerate(blocks):
+        for b in blocks:
             bt = _core(b.get("t"))
             if b["k"] in ("p", "h?", "h") and len(b.get("t") or "") <= 80:
                 for c in cores:

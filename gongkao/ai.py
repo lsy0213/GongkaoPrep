@@ -373,7 +373,7 @@ def _openai_request(cfg, req, with_usage):
     }
     if with_usage:
         body["stream_options"] = {"include_usage": True}  # 最后一段带上用量
-    return urllib.request.Request(
+    return urllib.request.Request(  # noqa: S310 —— 地址是用户在设置里填的 AI 接口（http/https）
         url,
         data=json.dumps(body).encode("utf-8"),
         headers={
@@ -482,8 +482,7 @@ def _stream_anthropic(cfg, req):
                 if i == len(attempts) - 1:
                     raise
         try:
-            for text in stream_obj.text_stream:
-                yield text
+            yield from stream_obj.text_stream
             final = stream_obj.get_final_message()
             u = getattr(final, "usage", None)
             if u is not None:
