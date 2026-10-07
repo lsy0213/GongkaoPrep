@@ -5,7 +5,8 @@ requires-python = ">=3.11"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["tests", "."]
-addopts = "-q"
+addopts = "-q -m 'not golden'"
+markers = ["golden: 资料整理黄金样本（需要本机资料，较慢）：pytest -m golden"]
 
 [tool.ruff]
 line-length = 130

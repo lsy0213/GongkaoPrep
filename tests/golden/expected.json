@@ -1,0 +1,151 @@
+{
+ "4c84809db124": {
+  "blocks": 94,
+  "kinds": {
+   "p": 93,
+   "h": 1
+  },
+  "chars": 6917,
+  "questions": 0,
+  "answered": 0,
+  "toc": 1,
+  "sha": "4b45a653ed1d5c95"
+ },
+ "67defb9bf5d3": {
+  "blocks": 56,
+  "kinds": {
+   "h": 8,
+   "p": 20,
+   "q": 28
+  },
+  "chars": 5885,
+  "questions": 28,
+  "answered": 5,
+  "toc": 8,
+  "sha": "d31f4111ed0d0abe"
+ },
+ "6889302832a4": {
+  "blocks": 42,
+  "kinds": {
+   "h": 1,
+   "p": 28,
+   "tree": 8,
+   "box": 3,
+   "tbl": 2
+  },
+  "chars": 2710,
+  "questions": 0,
+  "answered": 0,
+  "toc": 25,
+  "sha": "823d3c6f269d0bc3"
+ },
+ "8445f6b886de": {
+  "blocks": 468,
+  "kinds": {
+   "h": 6,
+   "p": 462
+  },
+  "chars": 33040,
+  "questions": 0,
+  "answered": 0,
+  "toc": 6,
+  "sha": "7ab717034f5a369b"
+ },
+ "9abc1ce2ab70": {
+  "blocks": 165,
+  "kinds": {
+   "h": 8,
+   "p": 157
+  },
+  "chars": 15042,
+  "questions": 0,
+  "answered": 0,
+  "toc": 8,
+  "sha": "0847ef3a2de6a8ca"
+ },
+ "a04acd549dc0": {
+  "blocks": 11,
+  "kinds": {
+   "p": 11
+  },
+  "chars": 352,
+  "questions": 0,
+  "answered": 0,
+  "toc": 1,
+  "sha": "eb1cd86dc80a5866"
+ },
+ "a6c34af18ced": {
+  "blocks": 704,
+  "kinds": {
+   "p": 701,
+   "h": 3
+  },
+  "chars": 18386,
+  "questions": 0,
+  "answered": 0,
+  "toc": 3,
+  "sha": "f24d853d4063ca49"
+ },
+ "c9e50c1bb11a": {
+  "blocks": 6,
+  "kinds": {
+   "h": 1,
+   "p": 5
+  },
+  "chars": 1116,
+  "questions": 0,
+  "answered": 0,
+  "toc": 1,
+  "sha": "117ba82f058d6f47"
+ },
+ "cc7032aef799": {
+  "blocks": 196,
+  "kinds": {
+   "p": 188,
+   "box": 1,
+   "tbl": 3,
+   "h": 4
+  },
+  "chars": 13602,
+  "questions": 0,
+  "answered": 0,
+  "toc": 4,
+  "sha": "88dfbbdd6b13ff81"
+ },
+ "d88c8b0784dd": {
+  "blocks": 7,
+  "kinds": {
+   "h": 1,
+   "p": 6
+  },
+  "chars": 992,
+  "questions": 0,
+  "answered": 0,
+  "toc": 1,
+  "sha": "1939901ffa64d28f"
+ },
+ "f23a9c8775b4": {
+  "blocks": 60,
+  "kinds": {
+   "h": 8,
+   "p": 52
+  },
+  "chars": 8347,
+  "questions": 0,
+  "answered": 0,
+  "toc": 8,
+  "sha": "e1ceb7fe52ae2388"
+ },
+ "f3813f6529c9": {
+  "blocks": 513,
+  "kinds": {
+   "h": 6,
+   "p": 507
+  },
+  "chars": 14833,
+  "questions": 0,
+  "answered": 0,
+  "toc": 6,
+  "sha": "91f8407b5424934e"
+ }
+}
