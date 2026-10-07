@@ -230,6 +230,13 @@ def jobs_start(ctx):
     if not os.path.isdir(root):
         return {"error": "资料文件夹不存在，请先在设置里填写正确的路径"}
     name, make = JOBS.get(ctx.body.get("job") or "all", JOBS["all"])
-    if not library.jobs.start(name, make(root)):
-        return {"error": "已经有整理任务在进行，请等它完成"}
-    return {"ok": True}
+    started = library.jobs.start(name, make(root))
+    if not started:
+        return {"error": f"“{name}”已经在进行或在排队了"}
+    return {"ok": True, "queued": started == "queued", "name": name}
+
+
+@route("POST", "/api/jobs/cancel", write=False)
+def jobs_cancel(ctx):
+    """取消正在进行的整理（已整理好的部分保留），并清空排队。"""
+    return {"ok": True, "cancelled": library.jobs.cancel()}

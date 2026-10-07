@@ -201,6 +201,7 @@ def init_db():
 def get_settings(conn, include_secret=False):
     s = {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM settings")}
     s["ai_api_key"] = secret.unprotect(s.get("ai_api_key") or "")
+    s["app_version"] = VERSION
     if not include_secret:
         key = s.get("ai_api_key") or ""
         s["ai_api_key"] = ""  # 完整 Key 不回传给界面，只给一个掩码提示

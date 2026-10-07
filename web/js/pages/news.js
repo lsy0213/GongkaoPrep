@@ -1,7 +1,7 @@
 // 时政晨读：资料文件夹里“时政合集 + 每日晨读”整理成的文字内容。
 // 五块：月度时政（年 → 月）、时政专题（按主题）、时政题库、人民日报精读（按月 → 每天一篇）、成语积累（按天：例句 + 释义，可挖空自测）。
 // 讲义、精读、题库在内置阅读器里读（#/news/doc/<id>）；成语积累在本页直接看。
-import { apiGet, apiPost, esc, shuffle, store, toast } from "../lib.js";
+import { apiGet, apiPost, esc, jobDoneText, jobProgressHTML, shuffle, store, toast } from "../lib.js";
 
 const TABS = [
   ["month", "月度时政"],
@@ -280,13 +280,7 @@ export async function render(el, ctx) {
 
   // ---------------------------------------------------------------- 整页
   function jobBox(job) {
-    if (job?.running && /时政/.test(job.name || "")) {
-      const pct = job.total ? Math.round((job.done / job.total) * 100) : 0;
-      return `<div class="job-box" id="job"><div class="row"><b>${esc(job.name)}</b><span class="small muted">${esc(job.step)}</span><span class="spacer"></span>
-        <span class="small muted">整理好的会陆续出现，可以先看</span></div>
-        <div class="progress mt"><i style="width:${pct}%"></i></div>
-        <div class="small muted mt" style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(job.msg)}</div></div>`;
-    }
+    if (job?.running && /时政/.test(job.name || "")) return jobProgressHTML(job, "整理好的会陆续出现，可以先看");
     return `<div id="job"></div>`;
   }
 
@@ -488,7 +482,11 @@ export async function render(el, ctx) {
       bindHits();
     };
     el.querySelectorAll("[data-job]").forEach((x) => (x.onclick = async () => {
-      try { await apiPost("/api/jobs/start", { job: x.dataset.job }); toast("开始整理；扫描件要识别文字，可能需要较长时间"); poll(); } catch (err) { toast(err.message, 4000); }
+      try {
+        const r = await apiPost("/api/jobs/start", { job: x.dataset.job });
+        toast(r.queued ? `已排队：等前面的整理完成后开始“${r.name}”` : "开始整理；扫描件要识别文字，可能需要较长时间", 3500);
+        poll();
+      } catch (err) { toast(err.message, 4000); }
     }));
     bindHits();
     bindBody();
@@ -516,7 +514,7 @@ export async function render(el, ctx) {
       if (!job) return;
       const box = el.querySelector("#job");
       if (job.running) { if (box) box.outerHTML = jobBox(job); }
-      else { clearInterval(pollTimer); toast(job.error ? "整理出错：" + job.error : "时政晨读整理完成", 4000); render(el, ctx); }
+      else { clearInterval(pollTimer); toast(jobDoneText(job, "时政晨读整理完成"), 4000); render(el, ctx); }
     }, 2000);
   }
 

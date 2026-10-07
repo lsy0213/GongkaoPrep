@@ -1,6 +1,6 @@
 // 资料库：讲义、笔记、常识、申论素材整理成的文字资料，按“行测各模块 / 申论 / 省情 / 面试”分类，点开在内置阅读器里读。
 // 真题卷、千题册、答案解析不在这里，它们在“真题卷”“刷题”里；#/library/view/<fid> 只给真题“原卷”按钮用。
-import { apiGet, apiPost, esc, store, toast } from "../lib.js";
+import { apiGet, apiPost, esc, jobDoneText, jobProgressHTML, store, toast } from "../lib.js";
 import { bindHeadSearch, headSearchBox, hlRegex } from "../headsearch.js";
 
 const SUBJ_MODULE = { "言语": "言语理解与表达", "数量": "数量关系", "判断": "判断推理", "资料": "资料分析", "常识": "常识判断", "申论": "申论", "面试": "面试" };
@@ -62,13 +62,7 @@ export async function render(el, ctx) {
 
   function jobBox(job) {
     const pending = Math.max(0, data.total_files - docs.length);
-    const pct = job.total ? Math.round((job.done / job.total) * 100) : 0;
-    if (job.running) {
-      return `<div class="job-box" id="job"><div class="row"><b>${esc(job.name)}</b><span class="small muted">${esc(job.step)}</span><span class="spacer"></span>
-        <span class="small muted">可以先去别的页面，整理在后台进行</span></div>
-        <div class="progress mt"><i style="width:${pct}%"></i></div>
-        <div class="small muted mt" style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(job.msg)}</div></div>`;
-    }
+    if (job.running) return jobProgressHTML(job);
     if (!pending && !job.error) return `<div id="job"></div>`;
     return `<div class="job-box" id="job"><div class="row">
         <span class="small ink2">${pending ? `还有 <b>${pending}</b> 份资料没整理（扫描件要识别文字，比较慢）` : ""}</span><span class="spacer"></span>
@@ -230,7 +224,11 @@ export async function render(el, ctx) {
     searchOff?.();
     searchOff = bindHeadSearch(el, { hot: HOT, run: runSearch });
     el.querySelectorAll("[data-job]").forEach((x) => (x.onclick = async () => {
-      try { await apiPost("/api/jobs/start", { job: x.dataset.job }); toast("开始整理；扫描件要识别文字，可能需要较长时间"); poll(); } catch (err) { toast(err.message, 4000); }
+      try {
+        const r = await apiPost("/api/jobs/start", { job: x.dataset.job });
+        toast(r.queued ? `已排队：等前面的整理完成后开始“${r.name}”` : "开始整理；扫描件要识别文字，可能需要较长时间", 3500);
+        poll();
+      } catch (err) { toast(err.message, 4000); }
     }));
   }
 
@@ -247,7 +245,7 @@ export async function render(el, ctx) {
         if (box) box.outerHTML = jobBox(job);
       } else {
         clearInterval(pollTimer);
-        toast(job.error ? "整理出错：" + job.error : "资料整理完成", 4000);
+        toast(jobDoneText(job, "资料整理完成"), 4000);
         render(el, ctx);
       }
     }, 1500);

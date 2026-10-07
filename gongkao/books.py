@@ -10,6 +10,7 @@
 """
 
 import json
+import logging
 import os
 import re
 
@@ -63,8 +64,6 @@ def _long_runs(mask, axis, min_frac):
 
 def find_grid(img, zoom):
     """返回 (横线 y 列表, 竖线 x 列表)，PDF 坐标；找不到表格返回 None。"""
-    import numpy as np
-
     gray = img.mean(axis=2)
     dark = gray < 165
     hl = _clusters(_long_runs(dark, 1, 0.45))
@@ -726,7 +725,7 @@ def build_all(catalog_files, root, skip_keys=(), progress=None):
             items, _roles = parse_book(os.path.join(root, f["rel"]), f["id"], not f["text"], prog,
                                        figure=btype[2] == "图形推理")
         except Exception as e:  # noqa: BLE001
-            print("题册解析失败", f["rel"], e)
+            logging.getLogger("gongkao.books").exception("题册解析失败：%s（%s）", f["rel"], e)
             items = []
         done_pages += f["pages"]
         bucket = by_type.setdefault(btype[0], {"type": btype, "files": [], "qs": []})

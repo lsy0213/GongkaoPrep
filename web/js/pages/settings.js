@@ -1,4 +1,4 @@
-import { apiGet, apiPost, bankMeta, clearBankCache, esc, getAIStatus, saveFile, store, streamAI, toast, todayISO } from "../lib.js";
+import { apiGet, apiPost, bankMeta, clearBankCache, esc, fmtBytes, getAIStatus, saveFile, store, streamAI, toast, todayISO } from "../lib.js";
 
 const SAMPLE = `{
   "materials": [
@@ -33,7 +33,8 @@ function readFile(input) {
 }
 
 export async function render(el) {
-  const [s, ai, presets, b, job] = await Promise.all([apiGet("/api/settings"), getAIStatus(true), apiGet("/api/ai/presets"), bankMeta(true), apiGet("/api/jobs")]);
+  const [s, ai, presets, b, job, backups, st] = await Promise.all([apiGet("/api/settings"), getAIStatus(true), apiGet("/api/ai/presets"),
+    bankMeta(true), apiGet("/api/jobs"), apiGet("/api/backups"), apiGet("/api/storage")]);
   const aiPreset = presets[ai.provider] || presets.none;
   const c = b.counts, realCount = (c["国考"] || 0) + (c["四川"] || 0);
   const theme = store.get("theme", "system");
@@ -76,7 +77,7 @@ export async function render(el) {
         <button class="btn" type="button" id="ai-test" data-ai-more>测试连接</button>
         ${s.ai_key_saved ? `<button class="btn ghost danger" type="button" id="clear-key">清除已保存的 Key</button>` : ""}</div>
       <div id="ai-test-res"></div>
-      <p class="small muted">Key 只保存在本机的 <code>%APPDATA%\\GongkaoPrep\\app.db</code> 里，界面上只显示掩码，导出备份时也不会包含。</p>
+      <p class="small muted">Key 加密后只保存在本机的学习记录里（只有当前 Windows 用户能解开），界面上只显示掩码，导出备份时也不会包含。</p>
       <details class="small muted"><summary style="cursor:pointer">怎么获取 API Key？</summary>
         <ul style="line-height:1.9">
           <li><b>DeepSeek</b>：platform.deepseek.com → API Keys（便宜、中文好，推荐）</li>
@@ -92,13 +93,13 @@ export async function render(el) {
     <form class="card" id="lib">
       <div class="card-head"><h2>资料文件夹</h2>
         <span class="chip ${realCount ? "good" : "warn"}">${realCount ? `已整理真题 ${b.papers.length} 套${b.books.length ? `、题册 ${c["千题册"]} 题` : ""}` : "尚未整理"}</span></div>
-      <p class="small ink2" style="margin-top:0">把真题、讲义、题册放在一个文件夹里（可以有子文件夹）。软件只读取、不会修改或移动这些文件；整理出的题库、全文索引和截图缓存保存在 <code>%APPDATA%\\GongkaoPrep\\library</code>。</p>
+      <p class="small ink2" style="margin-top:0">把真题、讲义、题册放在一个文件夹里（可以有子文件夹）。软件只读取、不会修改或移动这些文件；整理出的题库、全文索引和截图缓存保存在 <code>${esc(st.dir)}\\library</code>。</p>
       <label class="field">文件夹路径<input type="text" id="library_root" value="${esc(s.library_root)}" placeholder="例如 E:\\资料\\公考"></label>
       <div class="row mt"><button class="btn primary" type="submit">保存</button>
-        <button class="btn" type="button" data-job="all" ${job.running ? "disabled" : ""}>整理全部资料</button>
-        <button class="btn ghost" type="button" data-job="real" ${job.running ? "disabled" : ""} title="重新识别真题和答案">只重建真题题库</button>
-        <button class="btn ghost" type="button" data-job="books" ${job.running ? "disabled" : ""} title="识别千题册、5000题（扫描版需要 OCR）">只识别题册</button>
-        <button class="btn ghost" type="button" data-job="index" ${job.running ? "disabled" : ""} title="重新提取 PDF 文字供搜索">只重建全文索引</button>
+        <button class="btn" type="button" data-job="all">整理全部资料</button>
+        <button class="btn ghost" type="button" data-job="real" title="重新识别真题和答案">只重建真题题库</button>
+        <button class="btn ghost" type="button" data-job="books" title="识别千题册、5000题（扫描版需要 OCR）">只识别题册</button>
+        <button class="btn ghost" type="button" data-job="index" title="重新提取 PDF 文字供搜索">只重建全文索引</button>
         <span class="small muted">${job.running ? `正在${esc(job.name)}：${esc(job.step)} ${job.done}/${job.total}` : job.finished_at ? `上次整理完成于 ${esc(job.finished_at)}` : ""}</span></div>
       <p class="small muted">新增资料后点“整理全部资料”，只会处理新增或改动过的文件。整理进度可以在“资料库”页查看。</p>
     </form>
@@ -113,13 +114,90 @@ export async function render(el) {
     </div>
 
     <div class="card">
-      <div class="card-head"><h2>数据备份</h2></div>
-      <p class="small ink2" style="margin-top:0">所有学习记录保存在 <code>%APPDATA%\\GongkaoPrep\\app.db</code>，升级或重新打包软件都不会丢失。建议每周导出一次备份，换电脑时导入即可恢复。</p>
+      <div class="card-head"><h2>数据备份</h2><span class="chip good">每天自动备份</span></div>
+      <p class="small ink2" style="margin-top:0">学习记录每天第一次打开软件时自动备份一份（保留最近 ${backups.keep} 天），导入或恢复之前也会先留一份快照，误操作可以退回去。
+        备份在 <code>${esc(backups.dir)}</code>。</p>
+      <div class="row"><button class="btn" id="backup-now">立即备份</button>
+        <span class="small muted">${backups.items.length ? `共 ${backups.items.length} 份` : "还没有备份"}</span></div>
+      ${backups.items.length ? `<details class="mt"><summary class="small" style="cursor:pointer">查看和恢复备份</summary>
+        <table class="tbl small mt"><thead><tr><th>时间</th><th>类型</th><th>大小</th><th></th></tr></thead><tbody>
+        ${backups.items.map((x) => `<tr><td class="num">${esc(x.time)}</td><td>${esc(x.kind)}</td><td class="num">${fmtBytes(x.size)}</td>
+          <td><button class="btn sm ghost" data-restore="${esc(x.name)}">恢复到这一份</button></td></tr>`).join("")}</tbody></table></details>` : ""}
+      <h3 class="mt">导出 / 导入（换电脑用）</h3>
+      <p class="small ink2" style="margin-top:0">导出成一个 JSON 文件（不含 AI Key），换电脑后在这里导入即可恢复。</p>
       <div class="row"><button class="btn" id="export">导出备份</button>
         <input type="file" id="restore-file" accept=".json,application/json" style="max-width:280px">
-        <button class="btn" id="restore">从备份恢复</button></div>
-      <p class="small muted">恢复会覆盖当前的学习记录（AI Key 除外）。</p>
+        <button class="btn" id="restore">从备份文件导入</button></div>
+      <p class="small muted">导入会覆盖当前的学习记录（AI Key 除外），导入前会自动留一份快照。</p>
+    </div>
+
+    <div class="card" id="storage">
+      <div class="card-head"><h2>数据位置与空间</h2><span class="small muted">共 ${fmtBytes(st.total)} · 所在盘剩余 ${fmtBytes(st.free)}</span></div>
+      <p class="small ink2" style="margin-top:0">学习记录、整理好的资料库、缓存都在这个文件夹：<br><code>${esc(st.dir)}</code></p>
+      ${st.move_error ? `<p class="small" style="color:var(--bad)">上次搬移没有成功：${esc(st.move_error)}</p>` : ""}
+      ${st.pending_move ? `<div class="ai-box">下次启动软件时会把数据搬到 <code>${esc(st.pending_move)}</code>。请关闭软件再重新打开（搬 1 GB 左右要一两分钟）。
+          <button class="btn sm ghost" id="move-cancel">取消搬移</button></div>`
+        : st.env_override ? `<p class="small muted">当前由环境变量 GONGKAO_DATA_DIR 指定，不能在这里修改。</p>`
+        : `<div class="row"><input type="text" id="move-target" placeholder="例如 E:\\AppData\\GongkaoPrep" style="flex:1;min-width:240px">
+          ${window.pywebview?.api?.choose_folder ? `<button class="btn ghost" type="button" id="move-pick">选择文件夹…</button>` : ""}
+          <button class="btn" id="move-go">搬到这里</button></div>
+          <p class="small muted">为了不占 C 盘，可以把数据搬到别的盘。需要选一个空文件夹；搬完后 C 盘只留一个记录位置的小文件。</p>`}
+      <table class="tbl small mt"><thead><tr><th>内容</th><th>大小</th><th>说明</th><th></th></tr></thead><tbody>
+        ${st.parts.map((p) => `<tr><td>${esc(p.name)}</td><td class="num">${fmtBytes(p.size)}</td><td class="muted">${esc(p.desc)}</td>
+          <td>${p.clean && p.size ? `<button class="btn sm ghost" data-clean="${p.key}">清理</button>` : ""}</td></tr>`).join("")}
+        ${st.stale.length ? `<tr><td>旧版本备份、临时文件</td><td class="num">${fmtBytes(st.stale_size)}</td>
+          <td class="muted">${st.stale.length} 个（${esc(st.stale.slice(0, 3).map((x) => x.name).join("、"))}${st.stale.length > 3 ? "…" : ""}），可以删除</td>
+          <td><button class="btn sm ghost danger" data-clean="stale">删除</button></td></tr>` : ""}
+      </tbody></table>
+      <div class="row mt"><button class="btn ghost" id="vacuum">压缩数据库</button>
+        <span class="small muted">回收删除内容后留下的空间；在后台进行，资料很多时要几分钟。</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>关于与诊断</h2><span class="small muted">版本 ${esc(s.app_version || "")}</span></div>
+      <p class="small ink2" style="margin-top:0">软件出问题时，导出诊断信息（版本、环境、数据库状态、最近的日志；不含 API Key 和你的学习内容）发给帮你排查的人。</p>
+      <div class="row"><button class="btn ghost" id="diag">导出诊断信息</button>
+        <span class="small muted">日志在 <code>${esc(st.dir)}\\logs</code></span></div>
     </div>`;
+
+  el.querySelector("#backup-now").onclick = async () => {
+    try { const r = await apiPost("/api/backups/create"); toast("已备份：" + r.name); render(el); } catch (e) { toast(e.message, 4000); }
+  };
+  el.querySelectorAll("[data-restore]").forEach((x) => (x.onclick = async () => {
+    if (!x.dataset.armed) { x.dataset.armed = "1"; x.textContent = "确认覆盖当前记录"; return; }
+    try { await apiPost("/api/backups/restore", { name: x.dataset.restore }); toast("已恢复；恢复前的数据也留了一份快照", 4000); setTimeout(() => location.reload(), 800); }
+    catch (e) { toast(e.message, 4000); }
+  }));
+  const moveGo = el.querySelector("#move-go");
+  if (moveGo) moveGo.onclick = async () => {
+    const target = el.querySelector("#move-target").value.trim();
+    try {
+      const r = await apiPost("/api/datadir/move", { target });
+      toast(`已登记：关闭软件再打开时把约 ${fmtBytes(r.need)} 数据搬过去`, 5000);
+      render(el);
+    } catch (e) { toast(e.message, 5000); }
+  };
+  const pick = el.querySelector("#move-pick");
+  if (pick) pick.onclick = async () => {
+    const dir = await window.pywebview.api.choose_folder();
+    if (dir) el.querySelector("#move-target").value = dir.replace(/[\\/]+$/, "") + "\\GongkaoPrep";
+  };
+  const mc = el.querySelector("#move-cancel");
+  if (mc) mc.onclick = async () => { await apiPost("/api/datadir/move", { cancel: true }); toast("已取消搬移"); render(el); };
+  el.querySelectorAll("[data-clean]").forEach((x) => (x.onclick = async () => {
+    if (!x.dataset.armed) { x.dataset.armed = "1"; x.textContent = "确认"; return; }
+    try { const r = await apiPost("/api/storage/clean", { what: x.dataset.clean }); toast("已清理 " + fmtBytes(r.freed)); render(el); }
+    catch (e) { toast(e.message, 4000); }
+  }));
+  el.querySelector("#vacuum").onclick = async () => {
+    try { const r = await apiPost("/api/storage/vacuum"); toast(r.queued ? "已排队，前面的整理任务完成后开始压缩" : "已开始在后台压缩"); }
+    catch (e) { toast(e.message, 4000); }
+  };
+  el.querySelector("#diag").onclick = async () => {
+    const data = await apiGet("/api/diagnostics");
+    const where = await saveFile(`上岸备考-诊断-${todayISO()}.json`, JSON.stringify(data, null, 1));
+    if (where) toast("已保存：" + where, 4000);
+  };
 
   el.querySelector("#basic").onsubmit = async (e) => {
     e.preventDefault();
@@ -136,8 +214,8 @@ export async function render(el) {
   el.querySelectorAll("[data-job]").forEach((x) => (x.onclick = async () => {
     try {
       await apiPost("/api/settings", { library_root: el.querySelector("#library_root").value.trim() });
-      await apiPost("/api/jobs/start", { job: x.dataset.job });
-      toast("已开始，在资料库页可以看到进度");
+      const r = await apiPost("/api/jobs/start", { job: x.dataset.job });
+      toast(r.queued ? `已排队：等前面的整理完成后开始“${r.name}”` : "已开始，在资料库页可以看到进度", 3500);
       location.hash = "#/library";
     } catch (err) { toast(err.message, 4000); }
   }));

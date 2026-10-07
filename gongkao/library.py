@@ -1,6 +1,6 @@
 """资料库：扫描用户的资料文件夹，建目录、提取全文、渲染页面截图，并在后台生成真题题库。
 
-所有生成的数据都放在 %APPDATA%/GongkaoPrep/library/ 下；原始资料文件只读不改。
+所有生成的数据都放在数据目录的 library/ 下；原始资料文件只读不改。
 """
 
 import hashlib
@@ -8,12 +8,14 @@ import json
 import os
 import re
 import threading
+import logging
 import time
-import traceback
 import zlib
 
 from .dbutil import open_db
 from .paths import data_dir
+
+log = logging.getLogger("gongkao.library")
 
 LIB_DIR = data_dir() / "library"
 CATALOG_PATH = LIB_DIR / "catalog.json"
@@ -74,41 +76,95 @@ def classify(rel):
 
 # ---------------------------------------------------------------- 后台任务
 
+class Cancelled(BaseException):
+    """用户取消了后台任务。继承 BaseException：整理代码里“个别文件出错跳过”的 except Exception 不会吞掉它。"""
+
+
 class Jobs:
-    """同一时间只跑一个后台任务（扫描、生成题库、建全文索引），界面轮询进度。"""
+    """后台整理任务（扫描、生成题库、整理文档……）：同一时间跑一个，后来的排队；可以取消。
+
+    取消在下一次进度更新时生效（整理代码每处理一个文件或一页就报一次进度），已经整理好的部分会保留，
+    下次再整理只做剩下的。界面轮询 status()。
+    """
 
     def __init__(self):
         self.lock = threading.Lock()
-        self.state = {"running": False, "name": "", "step": "", "done": 0, "total": 0, "msg": "", "error": "",
-                      "finished_at": ""}
+        self.cancel_flag = threading.Event()
+        self.queue = []      # [(名字, 函数)]
+        self.history = []    # 最近完成的任务
+        self.state = self._fresh("")
+        self.state["running"] = False
+
+    @staticmethod
+    def _fresh(name):
+        return {"running": True, "name": name, "step": "", "done": 0, "total": 0, "msg": "", "error": "",
+                "cancelled": False, "started_at": time.strftime("%Y-%m-%d %H:%M:%S"), "finished_at": ""}
 
     def status(self):
         with self.lock:
-            return dict(self.state)
+            out = dict(self.state)
+            out["queue"] = [name for name, _fn in self.queue]
+            out["history"] = list(self.history)
+            out["cancelling"] = self.cancel_flag.is_set() and self.state["running"]
+            return out
 
     def progress(self, step, done, total, msg=""):
         with self.lock:
             self.state.update(step=step, done=done, total=total, msg=msg)
+        self.check()
+
+    def check(self):
+        if self.cancel_flag.is_set():
+            raise Cancelled()
 
     def start(self, name, fn):
+        """开始任务；已有任务在跑时排到队尾。返回 "started" / "queued"；同名任务已在跑或已在队里返回 ""。"""
         with self.lock:
             if self.state["running"]:
-                return False
-            self.state = {"running": True, "name": name, "step": "", "done": 0, "total": 0, "msg": "", "error": "",
-                          "finished_at": ""}
+                if name == self.state["name"] or any(n == name for n, _f in self.queue):
+                    return ""
+                self.queue.append((name, fn))
+                return "queued"
+            self.state = self._fresh(name)
+            self.cancel_flag.clear()
+        threading.Thread(target=self._run, args=(name, fn), name="job", daemon=True).start()
+        return "started"
 
-        def run():
-            err = ""
+    def cancel(self, clear_queue=True):
+        with self.lock:
+            if clear_queue:
+                self.queue.clear()
+            if self.state["running"]:
+                self.cancel_flag.set()
+                return True
+        return False
+
+    def _run(self, name, fn):
+        while True:
+            err, cancelled = "", False
+            log.info("开始后台任务：%s", name)
             try:
                 fn(self)
+            except Cancelled:
+                cancelled = True
+                log.info("后台任务已取消：%s", name)
             except Exception as e:  # noqa: BLE001
-                traceback.print_exc()
+                log.exception("后台任务出错：%s", name)
                 err = str(e)
+            else:
+                log.info("后台任务完成：%s", name)
             with self.lock:
-                self.state.update(running=False, error=err, finished_at=time.strftime("%Y-%m-%d %H:%M:%S"))
-
-        threading.Thread(target=run, daemon=True).start()
-        return True
+                finished = time.strftime("%Y-%m-%d %H:%M:%S")
+                self.history = ([{"name": name, "finished_at": finished, "error": err, "cancelled": cancelled}]
+                                + self.history)[:10]
+                self.cancel_flag.clear()
+                if self.queue:
+                    # 接着跑排队的任务：中间不把 running 置成 False，界面的轮询不会以为全部做完了
+                    name, fn = self.queue.pop(0)
+                    self.state = self._fresh(name)
+                    continue
+                self.state.update(running=False, error=err, cancelled=cancelled, finished_at=finished)
+                return
 
 
 jobs = Jobs()

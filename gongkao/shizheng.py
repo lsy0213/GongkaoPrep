@@ -1829,8 +1829,8 @@ def build(root, progress=None):
                 blocks, pages, scanned = build_unit(root, u, p2)
                 save_unit(conn, u, blocks, pages, scanned)
         except Exception as e:  # noqa: BLE001 —— 个别文件坏了不影响其他
-            import traceback
-            traceback.print_exc()
+            import logging
+            logging.getLogger("gongkao.shizheng").exception("整理失败：%s", u.get("rel") or u.get("id"))
             if kind == "doc":
                 save_unit(conn, u, [], 0, 0, error=str(e)[:200])
         done += n

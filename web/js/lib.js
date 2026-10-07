@@ -196,6 +196,38 @@ export function fmtMinutes(min) {
   return `${Math.floor(min / 60)} 小时 ${min % 60 ? (min % 60) + " 分" : ""}`.trim();
 }
 
+// 后台整理任务的进度框（资料库、时政晨读页共用）：进度条、当前文件、排队的任务、取消按钮
+export function jobProgressHTML(job, hint = "可以先去别的页面，整理在后台进行") {
+  const pct = job.total ? Math.round((job.done / job.total) * 100) : 0;
+  const queue = job.queue?.length ? `<div class="small muted mt">排队中：${job.queue.map(esc).join("、")}</div>` : "";
+  return `<div class="job-box" id="job"><div class="row"><b>${esc(job.name)}</b><span class="small muted">${esc(job.step)}</span><span class="spacer"></span>
+    <span class="small muted">${job.cancelling ? "正在停止，处理完当前文件就停…" : esc(hint)}</span>
+    ${job.cancelling ? "" : `<button class="btn sm ghost" data-job-cancel title="已经整理好的部分会保留，下次接着整理">停止</button>`}</div>
+    <div class="progress mt"><i style="width:${pct}%"></i></div>
+    <div class="small muted mt" style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(job.msg)}</div>${queue}</div>`;
+}
+
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest?.("[data-job-cancel]");
+  if (!b) return;
+  if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = "确认停止"; return; }
+  b.disabled = true;
+  try { await apiPost("/api/jobs/cancel"); toast("正在停止，已经整理好的部分会保留"); } catch (err) { toast(err.message, 4000); }
+});
+
+export function jobDoneText(job, okText) {
+  if (job.cancelled) return "已停止整理；已经整理好的部分保留了，下次接着整理";
+  return job.error ? "整理出错：" + job.error : okText;
+}
+
+export function fmtBytes(n) {
+  n = Number(n) || 0;
+  if (n >= 2 ** 30) return (n / 2 ** 30).toFixed(n >= 10 * 2 ** 30 ? 0 : 1) + " GB";
+  if (n >= 2 ** 20) return (n / 2 ** 20).toFixed(n >= 100 * 2 ** 20 ? 0 : 1) + " MB";
+  if (n >= 1024) return Math.round(n / 1024) + " KB";
+  return n + " B";
+}
+
 export function shuffle(arr) {
   const a = arr.slice();
   for (let i = a.length - 1; i > 0; i--) {

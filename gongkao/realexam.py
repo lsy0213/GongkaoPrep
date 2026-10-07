@@ -4,6 +4,7 @@
 图表类题目也能完整显示）、所属模块与题型、答案和解析。资料分析等共用材料的题，材料单独成一条。
 """
 
+import logging
 import os
 import re
 from collections import Counter
@@ -909,7 +910,7 @@ def build_all(root, progress=None):
         try:
             r = build_paper(root, p, a)
         except Exception as e:  # noqa: BLE001 —— 个别文件损坏不影响其他
-            print("解析失败", p["rel"], e)
+            logging.getLogger("gongkao.realexam").exception("真题解析失败：%s（%s）", p["rel"], e)
             continue
         if r:
             built.setdefault(r[0]["id"], []).append(r)

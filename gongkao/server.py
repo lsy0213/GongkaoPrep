@@ -13,9 +13,7 @@ import os
 import re
 import secrets
 import sqlite3
-import sys
 import threading
-from datetime import datetime
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -50,9 +48,9 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "GongkaoPrep/1.0"
 
     def log_message(self, fmt, *args):
-        # send_error 传进来的第一个参数是状态码（HTTPStatus），不是请求行
-        if "/api/" in str(args[0] if args else "") and sys.stderr:
-            sys.stderr.write("%s  %s\n" % (datetime.now().strftime("%H:%M:%S"), fmt % args))
+        # 只记接口请求（静态文件、截图太多）；send_error 传进来的第一个参数是状态码，不是请求行
+        if "/api/" in str(args[0] if args else ""):
+            log.debug(fmt, *args)
 
     # ---- helpers
     def send_json(self, obj, status=200):
@@ -121,8 +119,8 @@ class Handler(BaseHTTPRequestHandler):
         return (self.headers.get("Sec-Fetch-Site") or "same-origin") in ("same-origin", "none")
 
     def deny(self, why):
-        if sys.stderr:
-            sys.stderr.write(f"{datetime.now():%H:%M:%S}  拒绝 {self.command} {self.path}：{why}\n")
+        log.warning("拒绝 %s %s（Host=%s Origin=%s）：%s", self.command, self.path,
+                    self.headers.get("Host"), self.headers.get("Origin"), why)
         self.send_json({"error": "请求被拒绝：" + why}, 403)
 
     def guard(self, path):

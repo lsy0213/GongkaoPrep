@@ -84,6 +84,29 @@ def backup_restore(ctx):
     return userdb.restore_backup(str(ctx.body["name"]))
 
 
+@route("GET", "/api/diagnostics")
+def diagnostics(ctx):
+    """诊断信息：版本、环境、数据目录、数据库状态、后台任务和最近的日志。不含 API Key 和学习内容。"""
+    import platform
+    import sys
+
+    from .. import VERSION, library, logs
+    from ..paths import data_dir
+
+    conn = ctx.conn
+    counts = {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+              for t in ("attempts", "wrongbook", "cards", "essays", "interviews", "memo_items", "doc_marks")}
+    s = get_settings(conn)
+    return {
+        "app": "gongkao-prep", "version": VERSION, "python": sys.version, "platform": platform.platform(),
+        "frozen": bool(getattr(sys, "frozen", False)), "data_dir": str(data_dir()),
+        "schema": conn.execute("PRAGMA user_version").fetchone()[0],
+        "integrity": conn.execute("PRAGMA quick_check").fetchone()[0],
+        "counts": counts, "library_root": s.get("library_root"), "ai_provider": s.get("ai_provider"),
+        "ai_key_saved": s.get("ai_key_saved"), "job": library.jobs.status(), "log": logs.tail(400),
+    }
+
+
 @route("GET", "/api/ai/presets")
 def ai_presets(ctx):
     return ai.PRESETS

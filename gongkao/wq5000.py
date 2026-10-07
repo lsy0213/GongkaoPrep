@@ -564,7 +564,7 @@ class Visuals:
 # ---------------------------------------------------------------- 组装
 
 def sub_of(vol, label):
-    chap, sect, part = label.get("chap", ""), label.get("sect", ""), label.get("part", "")
+    chap, sect = label.get("chap", ""), label.get("sect", "")
     if vol == "常识":
         if not chap.endswith("常识"):  # 常识判断篇各章都叫“××常识”，其余是政治理论篇
             return "政治理论", (chap if chap in ("马克思主义哲学", "理论与政策") else "政治综合")
