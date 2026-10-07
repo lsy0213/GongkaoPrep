@@ -213,18 +213,52 @@ def build_request(kind, body, history):
 
     if kind == "interview":
         answer = (body.get("answer") or "").strip()
-        if not answer:
-            raise ValueError("请先写下你的作答要点再请 AI 点评")
+        transcript = (body.get("transcript") or "").strip()
+        if not answer and not transcript:
+            raise ValueError("请先写下你的作答要点（或录音转成文字）再请 AI 点评")
+        metrics = body.get("metrics") or {}
+        voice = ""
+        if metrics:
+            parts = []
+            if metrics.get("speech_seconds"):
+                parts.append(f"作答时长 {round(metrics['speech_seconds'])} 秒")
+            if metrics.get("cpm"):
+                parts.append(f"语速约 {metrics['cpm']} 字/分钟")
+            if metrics.get("pauses") is not None:
+                parts.append(f"超过 2 秒的停顿 {metrics['pauses']} 次，最长 {metrics.get('longest', 0)} 秒")
+            if metrics.get("fillers"):
+                parts.append("口头禅：" + "、".join(f"“{k}”{v} 次" for k, v in metrics["fillers"].items()))
+            voice = "【语音表现】" + "；".join(parts) + "\n\n" if parts else ""
         content = (
             f"这是一道结构化面试题（题型：{body.get('type')}）。\n\n"
             f"【题目】{body.get('question')}\n\n"
             f"【参考思路】{body.get('guide')}\n\n"
-            f"【我的作答】\n{answer}\n\n"
-            "请按面试考官的视角点评：1) 给出等级（好 / 中 / 差）和理由；"
-            "2) 内容上的亮点与缺失；3) 结构和表达上的问题；"
-            "4) 给出一份 3 分钟左右、口语化的示范作答。"
+            + (f"【我的作答要点】\n{answer}\n\n" if answer else "")
+            + (f"【我的口头作答（语音转写）】\n{_clip(transcript, 4000)}\n\n" if transcript else "")
+            + voice
+            + "请按面试考官的视角点评：1) 给出等级（好 / 中 / 差）和理由；"
+            "2) 内容上的亮点与缺失；3) 结构和表达上的问题"
+            + ("（结合语速、停顿、口头禅，正常语速约 180–220 字/分钟）" if voice else "")
+            + "；4) 给出一份 3 分钟左右、口语化的示范作答。"
         )
         return {"messages": [{"role": "user", "content": content}], "effort": "medium"}
+
+    if kind == "followup":
+        # 考官追问：根据考生的作答追问 1 个问题；追问满 2 轮后给总评
+        answer = (body.get("answer") or body.get("transcript") or "").strip()
+        if not answer:
+            raise ValueError("先作答（写下要点或录音转写）再请考官追问")
+        turns = [t for t in body.get("turns") or [] if t.get("q")]
+        convo = "".join(f"\n【考官追问 {i + 1}】{t['q']}\n【考生回答】{t.get('a') or '（未回答）'}\n" for i, t in enumerate(turns))
+        done = len(turns) >= 2 and turns[-1].get("a")
+        content = (
+            f"你是省考 / 国考结构化面试的主考官。题型：{body.get('type')}。\n\n"
+            f"【题目】{body.get('question')}\n\n【考生作答】\n{_clip(answer, 3000)}\n{convo}\n"
+            + ("请结合考生的作答和对追问的回答，给出总评：等级（好 / 中 / 差）、应变表现、最该改进的一点。"
+               if done else
+               "请像真实考官那样，针对考生作答里最薄弱或最值得深挖的地方，只提出 1 个追问（一两句话，不要解释、不要点评）。")
+        )
+        return {"messages": [{"role": "user", "content": content}], "effort": "low"}
 
     if kind == "reader":
         sel = (body.get("text") or "").strip()

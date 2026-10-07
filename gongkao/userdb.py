@@ -49,6 +49,8 @@ DEFAULT_SETTINGS = {
     "ai_monthly_tokens": "0",
     "ai_price_in": "",
     "ai_price_out": "",
+    # 面试录音转文字（可选，需要 faster-whisper）：模型名（如 small）或本机模型文件夹
+    "asr_model": "",
 }
 
 SCHEMA_V1 = """
@@ -151,12 +153,19 @@ def _v4_ai(conn):
     _add_columns(conn, "essays", [("ai_score", "REAL"), ("ai_full", "REAL")])
 
 
+def _v5_interview_audio(conn):
+    """面试练习的录音文件名、语音指标（时长、停顿、语速、口头禅）、语音转写的文字。"""
+    _add_columns(conn, "interviews", [("audio", "TEXT DEFAULT ''"), ("metrics", "TEXT DEFAULT ''"),
+                                      ("transcript", "TEXT DEFAULT ''")])
+
+
 # (版本号, 说明, 执行函数)。只能往后追加，不要改已有的步骤。
 MIGRATIONS = [
     (1, "初始表结构", lambda c: c.executescript(SCHEMA_V1)),
     (2, "统计、复习用的索引", lambda c: c.executescript(SCHEMA_V2_INDEXES)),
     (3, "闪卡、错题本改用 FSRS", _v3_fsrs),
     (4, "AI 用量记录、申论 AI 估分", _v4_ai),
+    (5, "面试录音与语音指标", _v5_interview_audio),
 ]
 
 

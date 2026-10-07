@@ -35,6 +35,7 @@ function readFile(input) {
 export async function render(el) {
   const [s, ai, presets, b, job, backups, st, usage] = await Promise.all([apiGet("/api/settings"), getAIStatus(true), apiGet("/api/ai/presets"),
     bankMeta(true), apiGet("/api/jobs"), apiGet("/api/backups"), apiGet("/api/storage"), apiGet("/api/ai/usage").catch(() => null)]);
+  const asrSt = await apiGet("/api/asr/status").catch(() => ({ installed: false, ready: false }));
   const fmtTok = (n) => (n >= 10000 ? (n / 10000).toFixed(n >= 1e6 ? 0 : 1) + " 万" : String(n));
   const aiPreset = presets[ai.provider] || presets.none;
   const c = b.counts, realCount = (c["国考"] || 0) + (c["四川"] || 0);
@@ -66,6 +67,15 @@ export async function render(el) {
         <label class="field">错题间隔到多少天算掌握<input type="number" id="wrong_master_days" min="7" max="365" value="${esc(s.wrong_master_days)}"></label>
       </div>
       <p class="small muted">软件按你每次的打分估计每张卡、每道错题的记忆稳定性，在快要忘记（回忆概率降到期望记忆率）时安排复习。记忆率定得越高，复习越频繁。</p>
+      <div class="row"><button class="btn primary" type="submit">保存</button></div>
+    </form>
+
+    <form class="card" id="asr-form">
+      <div class="card-head"><h2>面试录音转文字（可选）</h2><span class="chip ${asrSt.ready ? "good" : ""}">${asrSt.ready ? "可用" : asrSt.installed ? "未填模型" : "未安装"}</span></div>
+      <p class="small ink2" style="margin-top:0">面试练习可以录音、回听，并自动统计停顿；装了本机语音识别 <code>faster-whisper</code> 后，还能把录音转成文字，
+        算语速、数口头禅，交给 AI 按你真正说的话点评。全部在本机处理，不上传录音。</p>
+      <label class="field">语音识别模型<input type="text" id="asr_model" value="${esc(s.asr_model)}" placeholder="例如 small（第一次使用自动下载约 500 MB），或本机模型文件夹路径"></label>
+      ${asrSt.installed ? "" : `<p class="small muted">安装方法：在命令行运行 <code>pip install faster-whisper</code>，然后重启软件。</p>`}
       <div class="row"><button class="btn primary" type="submit">保存</button></div>
     </form>
 
@@ -256,6 +266,12 @@ export async function render(el) {
     for (const k of ["review_retention", "new_cards_per_day", "review_cap", "wrong_master_days"]) body[k] = el.querySelector("#" + k).value;
     await apiPost("/api/settings", body);
     toast("已保存，之后的复习按新设置安排");
+  };
+  el.querySelector("#asr-form").onsubmit = async (e) => {
+    e.preventDefault();
+    await apiPost("/api/settings", { asr_model: el.querySelector("#asr_model").value.trim() });
+    toast("已保存");
+    render(el);
   };
   el.querySelector("#lib").onsubmit = async (e) => {
     e.preventDefault();

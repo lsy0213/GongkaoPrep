@@ -38,6 +38,9 @@ SESSION_TOKEN = secrets.token_urlsafe(32)
 SESSION_COOKIE = "gk_session"
 # 不需要会话的接口：启动时检查是否已经在运行
 PUBLIC_API = {"/api/ping"}
+# 收二进制请求体的接口（面试录音）
+UPLOAD_API = {"/api/interviews/audio"}
+MAX_UPLOAD = 50 << 20
 
 api.load_all()
 
@@ -109,9 +112,13 @@ class Handler(BaseHTTPRequestHandler):
         return bool(m) and secrets.compare_digest(m.value, SESSION_TOKEN)
 
     def post_ok(self):
-        """写接口额外要求：JSON 请求体（跨站的表单、简单请求发不出来），来源是本页面。"""
+        """写接口额外要求：JSON 请求体（跨站的表单、简单请求发不出来），来源是本页面。
+
+        上传录音的接口收音频（audio/*）：同样不是浏览器“简单请求”的类型，跨站发送要先预检，本服务不放行。
+        """
         ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
-        if ctype != "application/json":
+        path = urlparse(self.path).path
+        if ctype != "application/json" and not (path in UPLOAD_API and ctype.startswith("audio/")):
             return False
         origin = (self.headers.get("Origin") or "").lower()
         if origin and origin != "http://" + (self.headers.get("Host") or "").strip().lower():
@@ -158,6 +165,18 @@ class Handler(BaseHTTPRequestHandler):
         clip = tuple(float(m.group(i)) for i in range(3, 7))
         png = library.render_png(target, int(m.group(2)), clip=clip, zoom=2.2)
         self.send_bytes(png, "image/png", cache="max-age=86400")
+
+    def send_recording(self, name):
+        """/api/recording/<文件名> —— 面试练习的录音回放。"""
+        from .api.notes import RECORDINGS
+
+        if not re.fullmatch(r"[\w-]+\.(webm|ogg|wav|m4a)", name or ""):
+            return self.send_error(HTTPStatus.BAD_REQUEST)
+        path = RECORDINGS / name
+        if not path.is_file():
+            return self.send_error(HTTPStatus.NOT_FOUND)
+        ctype = {"webm": "audio/webm", "ogg": "audio/ogg", "wav": "audio/wav", "m4a": "audio/mp4"}[name.rsplit(".", 1)[1]]
+        self.send_bytes(path.read_bytes(), ctype, cache="no-cache")
 
     def send_docimg(self, rel):
         """/api/docimg/<文件id>/<图片名> —— 资料库文档里的插图。"""
@@ -250,6 +269,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_page(parse_qs(url.query))
             if path.startswith("/api/library/file/"):
                 return self.send_source(path[len("/api/library/file/"):].split("/")[0])
+            if path.startswith("/api/recording/"):
+                return self.send_recording(path[len("/api/recording/"):])
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             return
         except Exception as e:  # noqa: BLE001
@@ -272,6 +293,8 @@ class Handler(BaseHTTPRequestHandler):
         path = unquote(url.path)
         if not self.guard(path):
             return
+        if path in UPLOAD_API:
+            return self.handle_upload(path, parse_qs(url.query))
         try:
             body = self.read_json()
         except (ValueError, UnicodeDecodeError):
@@ -279,6 +302,15 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/api/ai/"):
             return self.handle_ai(path[len("/api/ai/"):], body)
         return self.handle_api("POST", path, parse_qs(url.query), body)
+
+    def handle_upload(self, path, query):
+        """二进制上传（面试录音）：请求体是音频本身，参数放在查询串里。"""
+        n = int(self.headers.get("Content-Length") or 0)
+        if n <= 0 or n > MAX_UPLOAD:
+            return self.send_json({"error": "录音为空或太大（上限 50 MB）"}, 400)
+        data = self.rfile.read(n)
+        ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        return self.handle_api("POST", path, query, {"_bytes": data, "_ctype": ctype})
 
     def handle_api(self, method, path, query, body):
         found = api.find(method, path)

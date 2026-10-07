@@ -1,12 +1,15 @@
 """申论、面试作答记录，素材积累、笔记本、阅读记录、AI 对话记录。"""
 
 import json
+import re
 
 from .. import library
-from ..paths import content_dir, load_content
+from ..paths import content_dir, data_dir, load_content
 from ..userdb import now_str, rows
 from . import route
 from .home import log_minutes
+
+RECORDINGS = data_dir() / "recordings"
 
 # 笔记本第一次打开时准备好的本子
 DEFAULT_MEMO_BOOKS = ["公式本", "知识点本"]
@@ -65,6 +68,70 @@ def interview_save(ctx):
     )
     log_minutes(ctx.conn, "面试", round(int(b.get("seconds") or 0) / 60), "面试练习")
     return {"id": cur.lastrowid}
+
+
+FILLERS = ["嗯", "啊", "那个", "然后", "就是", "这个", "对吧", "其实"]
+
+
+def speech_metrics(transcript, seconds, pauses=None):
+    """语速（字/分钟）、口头禅次数；停顿数据由界面录音时测出后传进来。"""
+    text = re.sub(r"\s+", "", transcript or "")
+    out = dict(pauses or {})
+    if text and seconds:
+        out["chars"] = len(text)
+        out["cpm"] = round(len(text) / (seconds / 60))
+    if text:
+        out["fillers"] = {w: text.count(w) for w in FILLERS if text.count(w)}
+    return out
+
+
+@route("POST", "/api/interviews/audio")
+def interview_audio(ctx):
+    """保存一条面试练习的录音（请求体是音频本身，?id= 指定哪次练习）。"""
+    iid = int(ctx.q("id") or 0)
+    if not ctx.conn.execute("SELECT 1 FROM interviews WHERE id=?", (iid,)).fetchone():
+        raise ValueError("先保存这次练习再上传录音")
+    ext = {"audio/webm": "webm", "audio/ogg": "ogg", "audio/wav": "wav", "audio/mp4": "m4a"}.get(ctx.body.get("_ctype"), "webm")
+    RECORDINGS.mkdir(parents=True, exist_ok=True)
+    name = f"iv-{iid}.{ext}"
+    (RECORDINGS / name).write_bytes(ctx.body["_bytes"])
+    ctx.conn.execute("UPDATE interviews SET audio=? WHERE id=?", (name, iid))
+    return {"ok": True, "audio": name}
+
+
+@route("POST", "/api/interviews/metrics")
+def interview_metrics(ctx):
+    """录音时界面测出的停顿数据 + 转写文字 → 语速、口头禅，存进这次练习。"""
+    b = ctx.body
+    row = ctx.conn.execute("SELECT seconds FROM interviews WHERE id=?", (b["id"],)).fetchone()
+    if not row:
+        raise ValueError("找不到这次练习")
+    transcript = (b.get("transcript") or "").strip()
+    seconds = b.get("speech_seconds") or row["seconds"]
+    m = speech_metrics(transcript, seconds, b.get("pauses"))
+    ctx.conn.execute("UPDATE interviews SET metrics=?, transcript=? WHERE id=?",
+                     (json.dumps(m, ensure_ascii=False), transcript, b["id"]))
+    return {"ok": True, "metrics": m}
+
+
+@route("POST", "/api/interviews/transcribe", write=False)
+def interview_transcribe(ctx):
+    """本机语音转文字（装了 faster-whisper 并在设置里填了模型时可用）。"""
+    from .. import asr
+
+    iid = int(ctx.body["id"])
+    row = ctx.conn.execute("SELECT audio FROM interviews WHERE id=?", (iid,)).fetchone()
+    if not row or not row["audio"]:
+        raise ValueError("这次练习没有录音")
+    text = asr.transcribe(RECORDINGS / row["audio"], ctx.conn)
+    return {"ok": True, "transcript": text}
+
+
+@route("GET", "/api/asr/status")
+def asr_status(ctx):
+    from .. import asr
+
+    return asr.status(ctx.conn)
 
 
 @route("POST", "/api/interviews/feedback")
