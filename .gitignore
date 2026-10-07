@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# 打包产物
+build/
+dist/
+installer/Output/
+
+# 本机数据、调试残留
+data/
+_inspection/
+*.bak.db
+tests/golden_local/
+
+# IDE / 本机工具配置
+.idea/
+.vscode/
+.claude/
+
+# 来自购买资料的内容：只留在本机，不进仓库（缺了软件照常运行，只是少这部分内容）
+content/curated/*.txt
+content/doc_answers.json
+content/shizheng_answers.json
+content/speed_bank.json

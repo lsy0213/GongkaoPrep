@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>上岸备考 · 公考小窝</title>
+<link rel="icon" href="/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/vendor/katex/katex.min.css">
+</head>
+<body>
+<div id="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <img class="brand-logo" src="/logo.svg" alt="">
+      <div>
+        <div class="brand-name">上岸备考</div>
+        <div class="brand-sub">国考 · 省考 · 公考小窝</div>
+      </div>
+    </div>
+    <nav id="nav">
+      <a class="nav-item" href="#/" data-route=""><span class="ico">⌂</span><span class="label">首页</span></a>
+      <a class="nav-item" href="#/plan" data-route="plan"><span class="ico">☷</span><span class="label">复习计划</span></a>
+      <div class="nav-sec" data-sec="learn">
+        <button class="nav-group" type="button" aria-expanded="true"><span class="ico caret" aria-hidden="true">›</span><span class="label">学习</span></button>
+        <div class="nav-sec-body"><div><div>
+          <a class="nav-item" href="#/learn" data-route="learn"><span class="ico">✎</span><span class="label">系统教程</span></a>
+          <a class="nav-item" href="#/library" data-route="library"><span class="ico">▥</span><span class="label">资料库</span></a>
+          <a class="nav-item" href="#/news" data-route="news"><span class="ico">☼</span><span class="label">时政晨读</span></a>
+        </div></div></div>
+      </div>
+      <div class="nav-sec" data-sec="xingce">
+        <button class="nav-group" type="button" aria-expanded="true"><span class="ico caret" aria-hidden="true">›</span><span class="label">行测</span></button>
+        <div class="nav-sec-body"><div><div>
+          <a class="nav-item" href="#/real" data-route="real"><span class="ico">卷</span><span class="label">真题卷</span></a>
+          <a class="nav-item" href="#/practice" data-route="practice"><span class="ico">✐</span><span class="label">专项刷题</span></a>
+          <a class="nav-item" href="#/mock" data-route="mock"><span class="ico">⌛</span><span class="label">模拟考试</span></a>
+          <a class="nav-item" href="#/speed" data-route="speed"><span class="ico">∑</span><span class="label">速算训练</span></a>
+        </div></div></div>
+      </div>
+      <div class="nav-sec" data-sec="shenlun">
+        <button class="nav-group" type="button" aria-expanded="true"><span class="ico caret" aria-hidden="true">›</span><span class="label">申论</span></button>
+        <div class="nav-sec-body"><div><div>
+          <a class="nav-item" href="#/essay" data-route="essay"><span class="ico">✒</span><span class="label">申论练习</span></a>
+          <a class="nav-item" href="#/notes" data-route="notes"><span class="ico">❦</span><span class="label">素材积累</span></a>
+        </div></div></div>
+      </div>
+      <div class="nav-sec" data-sec="mianshi">
+        <button class="nav-group" type="button" aria-expanded="true"><span class="ico caret" aria-hidden="true">›</span><span class="label">面试</span></button>
+        <div class="nav-sec-body"><div><div>
+          <a class="nav-item" href="#/interview" data-route="interview"><span class="ico">❝</span><span class="label">面试练习</span></a>
+        </div></div></div>
+      </div>
+      <div class="nav-sec" data-sec="review">
+        <button class="nav-group" type="button" aria-expanded="true"><span class="ico caret" aria-hidden="true">›</span><span class="label">复习</span></button>
+        <div class="nav-sec-body"><div><div>
+          <a class="nav-item" href="#/wrong" data-route="wrong"><span class="ico">✗</span><span class="label">错题本</span><span class="badge" id="badge-wrong" hidden></span></a>          <a class="nav-item" href="#/cards" data-route="cards"><span class="ico">❖</span><span class="label">闪卡记忆</span></a>
+          <a class="nav-item" href="#/stats" data-route="stats"><span class="ico">▤</span><span class="label">学习统计</span></a>
+        </div></div></div>
+      </div>
+      <a class="nav-item" href="#/memo" data-route="memo"><span class="ico">✍</span><span class="label">笔记本</span></a>
+      <div class="nav-sep"></div>
+      <a class="nav-item" href="#/ai" data-route="ai"><span class="ico">✦</span><span class="label">AI 助教</span></a>
+      <a class="nav-item" href="#/settings" data-route="settings"><span class="ico">⚙</span><span class="label">设置</span></a>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="timer" id="timer"></div>
+      <button class="nav-toggle" id="nav-toggle" title="收起侧边栏" aria-label="收起侧边栏"><span class="ico">«</span><span class="label">收起</span></button>
+    </div>
+  </aside>
+  <main id="view"><div class="empty">正在打开小窝…</div></main>
+</div>
+<div class="skin-deco" aria-hidden="true"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="/vendor/katex/katex.min.js"></script>
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>
