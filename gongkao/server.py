@@ -8,6 +8,7 @@ import json
 import mimetypes
 import os
 import re
+import secrets
 import subprocess
 import sqlite3
 import sys
@@ -15,6 +16,7 @@ import threading
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta
 from http import HTTPStatus
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -29,6 +31,13 @@ DB_PATH = os.path.join(DATA_DIR, "app.db")
 HOST = "127.0.0.1"
 # 固定端口优先：界面的地址不变；被占用时换一个空闲端口
 PREFERRED_PORT = int(os.environ.get("GONGKAO_PORT", "27315"))
+
+# 本次运行的会话令牌：打开界面（index.html）时写进 Cookie（SameSite=Strict），之后的接口请求都要带上。
+# 别的网站发来的请求带不上这个 Cookie（跨站 + 不同主机名），也就改不了设置、读不走数据。
+SESSION_TOKEN = secrets.token_urlsafe(32)
+SESSION_COOKIE = "gk_session"
+# 不需要会话的接口：启动时检查是否已经在运行
+PUBLIC_API = {"/api/ping"}
 
 # 错题复习间隔（天）：做错后第 1、2、4、7、15、30 天各复习一次，全部答对即视为掌握
 REVIEW_INTERVALS = [1, 2, 4, 7, 15, 30]
@@ -785,7 +794,7 @@ class Handler(BaseHTTPRequestHandler):
             return {}
         return json.loads(self.rfile.read(n).decode("utf-8"))
 
-    def send_file(self, path):
+    def send_file(self, path, set_session=False):
         if not os.path.isfile(path):
             self.send_error(HTTPStatus.NOT_FOUND)
             return
@@ -798,12 +807,60 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-cache")
+        if set_session:
+            self.send_header("Set-Cookie", f"{SESSION_COOKIE}={SESSION_TOKEN}; Path=/; HttpOnly; SameSite=Strict")
         self.end_headers()
         self.wfile.write(body)
 
     def safe_join(self, base, rel):
-        p = os.path.normpath(os.path.join(base, rel))
-        return p if p.startswith(base) else None
+        base = os.path.abspath(base)
+        p = os.path.abspath(os.path.join(base, rel))
+        try:
+            return p if os.path.commonpath([base, p]) == base else None
+        except ValueError:  # 不在同一个盘
+            return None
+
+    # ---- 访问控制：只接受本机界面发来的请求
+    def host_ok(self):
+        """Host 必须是本机地址（防 DNS 重绑定：恶意域名解析到 127.0.0.1 时，Host 是那个域名）。"""
+        host = (self.headers.get("Host") or "").strip().lower()
+        port = self.server.server_address[1]
+        return host in (f"127.0.0.1:{port}", f"localhost:{port}") or host in getattr(self.server, "extra_hosts", ())
+
+    def session_ok(self):
+        try:
+            m = SimpleCookie(self.headers.get("Cookie") or "").get(SESSION_COOKIE)
+        except Exception:  # noqa: BLE001 —— 格式错误的 Cookie 当作没带
+            return False
+        return bool(m) and secrets.compare_digest(m.value, SESSION_TOKEN)
+
+    def post_ok(self):
+        """写接口额外要求：JSON 请求体（跨站的表单、简单请求发不出来），来源是本页面。"""
+        ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        if ctype != "application/json":
+            return False
+        origin = (self.headers.get("Origin") or "").lower()
+        if origin and origin != "http://" + (self.headers.get("Host") or "").strip().lower():
+            return False
+        return (self.headers.get("Sec-Fetch-Site") or "same-origin") in ("same-origin", "none")
+
+    def deny(self, why):
+        if sys.stderr:
+            sys.stderr.write(f"{datetime.now():%H:%M:%S}  拒绝 {self.command} {self.path}：{why}\n")
+        self.send_json({"error": "请求被拒绝：" + why}, 403)
+
+    def guard(self, path):
+        """放行返回 True；不放行时已经回了 403。"""
+        if not self.host_ok():
+            self.deny("只接受本机访问")
+            return False
+        if path.startswith("/api/") and path not in PUBLIC_API and not self.session_ok():
+            self.deny("会话无效，请重新打开软件窗口")
+            return False
+        if self.command == "POST" and not self.post_ok():
+            self.deny("来源不明")
+            return False
+        return True
 
     # ---- routing
     def send_bytes(self, body, ctype, cache="no-cache", extra=None):
@@ -889,6 +946,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_HEAD(self):
         """PDF 阅读器会先发 HEAD 探文件大小和是否支持分段下载。"""
         path = unquote(urlparse(self.path).path)
+        if not self.guard(path):
+            return
         target = None
         if path.startswith("/api/library/file/"):
             target, _f = library.resolve(path[len("/api/library/file/"):].split("/")[0])
@@ -906,6 +965,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         url = urlparse(self.path)
         path = unquote(url.path)
+        if not self.guard(path):
+            return
         try:
             if path.startswith("/api/crop/"):
                 return self.send_crop(path[len("/api/crop/"):])
@@ -930,11 +991,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_error(HTTPStatus.FORBIDDEN)
         if not os.path.isfile(p):
             p = os.path.join(STATIC_DIR, "index.html")
-        self.send_file(p)
+        self.send_file(p, set_session=os.path.basename(p) == "index.html")
 
     def do_POST(self):
         url = urlparse(self.path)
         path = unquote(url.path)
+        if not self.guard(path):
+            return
         try:
             body = self.read_json()
         except (ValueError, UnicodeDecodeError):
@@ -1422,6 +1485,8 @@ class Handler(BaseHTTPRequestHandler):
 
 def auto_build():
     """第一次运行（或资料目录还没整理过）时，在后台自动整理一遍资料文件夹。"""
+    if os.environ.get("GONGKAO_NO_AUTOBUILD"):
+        return
     with db() as conn:
         root = get_settings(conn).get("library_root") or ""
     if not root or not os.path.isdir(root):

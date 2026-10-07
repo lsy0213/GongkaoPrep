@@ -1,0 +1,24 @@
+[project]
+name = "gongkao-prep"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests", "."]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 130
+target-version = "py311"
+extend-exclude = ["build", "dist", "_inspection"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "S", "UP", "BLE"]
+ignore = [
+  "E501",   # 长行：中文注释和正则较多，交给 line-length 参考即可
+  "E731",   # lambda 赋值（路由里的小工具函数）
+  "B008", "S101", "S311",  # 测试里的 assert、出题用的 random 不是安全场景
+  "S603", "S607",  # 调用本机 explorer / powershell 是有意为之
+  "S608",  # 表名来自固定白名单的 SQL 拼接
+  "UP015", "UP031", "UP032",
+]
