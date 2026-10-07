@@ -12,6 +12,7 @@ import mimetypes
 import os
 import re
 import secrets
+import sys
 import sqlite3
 import threading
 from http import HTTPStatus
@@ -53,7 +54,9 @@ api.load_all()
 # ---------------------------------------------------------------- HTTP
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "GongkaoPrep/1.0"
+    server_version = "GongkaoPrep"
+    # 响应头和正文分两次写出；不关 Nagle 时每隔一个请求就要多等约 200 毫秒（和对方的延迟确认互相等）
+    disable_nagle_algorithm = True
 
     def log_message(self, fmt, *args):
         # 只记接口请求（静态文件、截图太多）；send_error 传进来的第一个参数是状态码，不是请求行
@@ -103,18 +106,33 @@ class Handler(BaseHTTPRequestHandler):
             return None
 
     # ---- 访问控制：只接受本机界面发来的请求
+    @property
+    def is_lan(self):
+        """这个请求是不是从局域网（手机）来的。"""
+        return bool(getattr(self.server, "lan", False))
+
     def host_ok(self):
         """Host 必须是本机地址（防 DNS 重绑定：恶意域名解析到 127.0.0.1 时，Host 是那个域名）。"""
         host = (self.headers.get("Host") or "").strip().lower()
+        if self.is_lan:
+            return host in getattr(self.server, "extra_hosts", ())
         port = self.server.server_address[1]
-        return host in (f"127.0.0.1:{port}", f"localhost:{port}") or host in getattr(self.server, "extra_hosts", ())
+        return host in (f"127.0.0.1:{port}", f"localhost:{port}")
+
+    def cookie(self, name):
+        try:
+            m = SimpleCookie(self.headers.get("Cookie") or "").get(name)
+        except Exception:  # noqa: BLE001 —— 格式错误的 Cookie 当作没带
+            return ""
+        return m.value if m else ""
 
     def session_ok(self):
-        try:
-            m = SimpleCookie(self.headers.get("Cookie") or "").get(SESSION_COOKIE)
-        except Exception:  # noqa: BLE001 —— 格式错误的 Cookie 当作没带
-            return False
-        return bool(m) and secrets.compare_digest(m.value, SESSION_TOKEN)
+        if self.is_lan:
+            from . import lan
+
+            return lan.token_ok(self.cookie(lan.LAN_COOKIE))
+        value = self.cookie(SESSION_COOKIE)
+        return bool(value) and secrets.compare_digest(value, SESSION_TOKEN)
 
     def post_ok(self):
         """写接口额外要求：JSON 请求体（跨站的表单、简单请求发不出来），来源是本页面。
@@ -140,13 +158,51 @@ class Handler(BaseHTTPRequestHandler):
         if not self.host_ok():
             self.deny("只接受本机访问")
             return False
-        if path.startswith("/api/") and path not in PUBLIC_API and not self.session_ok():
+        if self.is_lan:
+            # 手机：除了配对页，连页面本身都要先配对；管理类接口一律不行
+            from . import lan
+
+            if path == "/pair":
+                return True
+            if not self.session_ok():
+                self.send_html_message("还没有配对", "请在电脑上打开「设置 → 手机访问」，用手机扫二维码。", 403)
+                return False
+            if path.startswith(lan.DENY_PREFIXES):
+                self.deny("手机上不能用这个功能，请在电脑上操作")
+                return False
+        elif path.startswith("/api/") and path not in PUBLIC_API and not self.session_ok():
             self.deny("会话无效，请重新打开软件窗口")
             return False
         if self.command == "POST" and not self.post_ok():
             self.deny("来源不明")
             return False
         return True
+
+    def send_html_message(self, title, text, status=200, cookie=""):
+        body = (f"<!doctype html><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
+                f"<title>{title}</title><body style='font:16px/1.7 sans-serif;padding:32px;max-width:520px;margin:auto'>"
+                f"<h2>{title}</h2><p>{text}</p></body>").encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        if cookie:
+            self.send_header("Set-Cookie", cookie)
+        self.end_headers()
+        self.wfile.write(body)
+
+    def handle_pair(self, query):
+        """手机扫码配对：配对码对了就发长期 Cookie，跳到首页。"""
+        from . import lan
+
+        code = (query.get("code") or [""])[0]
+        if not lan.check_pair(code):
+            return self.send_html_message("配对码不对或已过期", "请在电脑上重新打开「设置 → 手机访问」，扫新的二维码。", 403)
+        self.send_response(302)
+        self.send_header("Location", "/")
+        self.send_header("Set-Cookie", f"{lan.LAN_COOKIE}={lan.lan_token()}; Path=/; Max-Age=15552000; HttpOnly; SameSite=Strict")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     # ---- routing
     def send_bytes(self, body, ctype, cache="no-cache", extra=None):
@@ -265,6 +321,8 @@ class Handler(BaseHTTPRequestHandler):
         path = unquote(url.path)
         if not self.guard(path):
             return
+        if self.is_lan and path == "/pair":
+            return self.handle_pair(parse_qs(url.query))
         try:
             if path.startswith("/api/crop/"):
                 return self.send_crop(path[len("/api/crop/"):])
@@ -291,7 +349,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_error(HTTPStatus.FORBIDDEN)
         if not os.path.isfile(p):
             p = os.path.join(STATIC_DIR, "index.html")
-        self.send_file(p, set_session=os.path.basename(p) == "index.html")
+        self.send_file(p, set_session=os.path.basename(p) == "index.html" and not self.is_lan)
 
     def do_POST(self):
         url = urlparse(self.path)
@@ -441,4 +499,22 @@ def start_server():
         server = ThreadingHTTPServer((HOST, 0), Handler)
     server.daemon_threads = True
     threading.Thread(target=server.serve_forever, daemon=True).start()
+    from .api.storage import warm_up
+
+    threading.Thread(target=warm_up, name="warm-up", daemon=True).start()
+    # 上次开着“手机访问”：接着开（--serve 开发模式不开，免得和正在用的窗口抢端口）
+    if "--serve" not in sys.argv:
+        with db() as conn:
+            s = {r[0]: r[1] for r in conn.execute("SELECT key, value FROM settings WHERE key IN ('lan_autostart', 'lan_ip')")}
+        if s.get("lan_autostart") == "1":
+            from . import lan
+
+            def autostart():
+                ip = s.get("lan_ip") or ""
+                try:
+                    lan.start(Handler, ip=ip if ip in lan.candidate_ips() else "")
+                except (OSError, ValueError) as e:
+                    log.warning("手机访问没有打开：%s", e)
+
+            threading.Thread(target=autostart, name="lan-autostart", daemon=True).start()
     return server.server_address[1]

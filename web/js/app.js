@@ -41,6 +41,11 @@ function revealActiveSec() {
 }
 navSecs.forEach((s) => setFolded(s, !!folded?.includes(s.dataset.sec)));
 
+// 手机上的抽屉菜单：点菜单按钮打开，点导航项或遮罩关闭
+document.getElementById("mobile-menu").onclick = () => document.body.classList.toggle("nav-open");
+document.getElementById("nav-scrim").onclick = () => document.body.classList.remove("nav-open");
+document.getElementById("nav").addEventListener("click", (e) => { if (e.target.closest("a.nav-item")) document.body.classList.remove("nav-open"); });
+
 const ROUTES = {
   "": "home", plan: "plan", learn: "learn", notes: "notes", cards: "cards", practice: "practice",
   mock: "mock", speed: "speed", essay: "essay", interview: "interview", wrong: "wrong", memo: "memo", real: "real", library: "library", news: "news",

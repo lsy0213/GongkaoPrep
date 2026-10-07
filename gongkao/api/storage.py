@@ -29,7 +29,19 @@ PARTS = [
 ]
 
 
+_size_cache = {}  # 目录 → (时间, 大小)：几万个缓存文件逐个统计要好几秒，5 分钟内复用
+
+
 def _size(p: Path):
+    import time
+
+    if p.is_dir():
+        hit = _size_cache.get(str(p))
+        if hit and time.time() - hit[0] < 300:
+            return hit[1]
+        n = userdb.disk_usage(p)
+        _size_cache[str(p)] = (time.time(), n)
+        return n
     if p.is_file():
         total = p.stat().st_size
         for extra in ("-wal", "-shm"):
@@ -56,7 +68,7 @@ def storage(ctx):
     parts = [{"key": k, "name": n, "path": str(base / rel), "size": _size(base / rel), "desc": d, "clean": c}
              for k, n, rel, d, c in PARTS]
     stale = _stale_files(base)
-    total = userdb.disk_usage(base)
+    total = _size(base)
     try:
         free = shutil.disk_usage(base).free
     except OSError:
@@ -71,8 +83,19 @@ def storage(ctx):
     }
 
 
+def warm_up():
+    """启动后在后台先把空间统计、网卡地址算好，打开设置页时不用等。"""
+    from .. import lan
+
+    for _k, _n, rel, _d, _c in PARTS:
+        _size(paths.data_dir() / rel)
+    _size(paths.data_dir())
+    lan.candidate_ips()
+
+
 @route("POST", "/api/storage/clean", write=False)
 def storage_clean(ctx):
+    _size_cache.clear()
     what = ctx.body.get("what")
     base = paths.data_dir()
     freed = 0
@@ -117,6 +140,7 @@ def _vacuum(job):
             pass  # 正被整理任务占用：跳过，下次再压缩
         finally:
             conn.close()
+    _size_cache.clear()
     job.progress("压缩数据库", len(dbs), len(dbs), "完成")
 
 
@@ -124,6 +148,50 @@ def _vacuum(job):
 def storage_vacuum(ctx):
     started = library.jobs.start("压缩数据库", _vacuum)
     return {"ok": True, "queued": started == "queued"} if started else {"error": "已经在压缩了"}
+
+
+@route("GET", "/api/lan/status")
+def lan_status(ctx):
+    from .. import lan
+
+    st = lan.status()
+    st["autostart"] = (ctx.conn.execute("SELECT value FROM settings WHERE key='lan_autostart'").fetchone() or ["0"])[0] == "1"
+    st["candidates"] = lan.candidate_ips()
+    if st["running"]:
+        st["qr"] = lan.qr_svg(st["url"])
+    return st
+
+
+@route("POST", "/api/lan/start", write=True)
+def lan_start(ctx):
+    from .. import lan
+    from ..server import Handler
+
+    ip = (ctx.body.get("ip") or "").strip()
+    if ip and ip not in lan.candidate_ips():
+        raise ValueError("这个地址不是本机的局域网地址")
+    lan.start(Handler, ip=ip)
+    ctx.conn.execute("INSERT OR REPLACE INTO settings(key, value) VALUES ('lan_autostart', ?)",
+                     ("1" if ctx.body.get("autostart") else "0",))
+    ctx.conn.execute("INSERT OR REPLACE INTO settings(key, value) VALUES ('lan_ip', ?)", (ip,))
+    return lan_status(ctx)
+
+
+@route("POST", "/api/lan/stop", write=True)
+def lan_stop(ctx):
+    from .. import lan
+
+    lan.stop()
+    ctx.conn.execute("INSERT OR REPLACE INTO settings(key, value) VALUES ('lan_autostart', '0')")
+    return lan_status(ctx)
+
+
+@route("POST", "/api/lan/reset", write=False)
+def lan_reset(ctx):
+    from .. import lan
+
+    lan.reset_token()
+    return lan_status(ctx)
 
 
 @route("POST", "/api/datadir/move", write=False)

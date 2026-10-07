@@ -5,8 +5,8 @@ requires-python = ">=3.11"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["tests", "."]
-addopts = "-q -m 'not golden'"
-markers = ["golden: 资料整理黄金样本（需要本机资料，较慢）：pytest -m golden"]
+addopts = "-q -m 'not golden and not lan'"
+markers = ["lan: 手机访问（会监听局域网地址，Windows 可能弹防火墙提示）：pytest -m lan", "golden: 资料整理黄金样本（需要本机资料，较慢）：pytest -m golden"]
 
 [tool.ruff]
 line-length = 130

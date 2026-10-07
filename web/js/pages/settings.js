@@ -36,6 +36,7 @@ export async function render(el) {
   const [s, ai, presets, b, job, backups, st, usage] = await Promise.all([apiGet("/api/settings"), getAIStatus(true), apiGet("/api/ai/presets"),
     bankMeta(true), apiGet("/api/jobs"), apiGet("/api/backups"), apiGet("/api/storage"), apiGet("/api/ai/usage").catch(() => null)]);
   const asrSt = await apiGet("/api/asr/status").catch(() => ({ installed: false, ready: false }));
+  const lanSt = await apiGet("/api/lan/status").catch(() => ({ running: false }));
   const fmtTok = (n) => (n >= 10000 ? (n / 10000).toFixed(n >= 1e6 ? 0 : 1) + " 万" : String(n));
   const aiPreset = presets[ai.provider] || presets.none;
   const c = b.counts, realCount = (c["国考"] || 0) + (c["四川"] || 0);
@@ -69,6 +70,23 @@ export async function render(el) {
       <p class="small muted">软件按你每次的打分估计每张卡、每道错题的记忆稳定性，在快要忘记（回忆概率降到期望记忆率）时安排复习。记忆率定得越高，复习越频繁。</p>
       <div class="row"><button class="btn primary" type="submit">保存</button></div>
     </form>
+
+    <div class="card" id="lan">
+      <div class="card-head"><h2>手机访问</h2><span class="chip ${lanSt.running ? "good" : ""}">${lanSt.running ? "已打开" : "已关闭"}</span></div>
+      <p class="small ink2" style="margin-top:0">手机和电脑连同一个 Wi-Fi，用手机扫码就能在手机上背闪卡、读时政、刷题，记录都存在这台电脑上。
+        电脑上的软件要开着；第一次打开时 Windows 可能弹出防火墙提示，选“允许”（专用网络）。</p>
+      ${lanSt.running ? `<div class="row" style="align-items:flex-start;gap:20px">
+          <div class="lan-qr">${lanSt.qr}</div>
+          <div class="stack" style="gap:8px"><div>用手机相机或微信扫左边的二维码配对（只需一次）。</div>
+            <div class="small muted">配对后手机直接打开：<code>${esc(lanSt.home)}</code></div>
+            <div class="small muted">只有扫过码的手机能打开；改数据位置、恢复备份、导入导出等操作只能在电脑上做。</div>
+            <div class="row"><button class="btn" id="lan-stop">关闭手机访问</button>
+              <button class="btn ghost" id="lan-reset" title="换掉配对凭证，已经配对的手机都要重新扫码">重置配对</button></div></div></div>`
+        : `<div class="row"><button class="btn primary" id="lan-start">打开手机访问</button>
+          ${(lanSt.candidates || []).length > 1 ? `<select id="lan-ip" title="电脑有多个网络地址时，选和手机连同一个 Wi-Fi 的那个（通常是 192.168.x.x）">
+            ${lanSt.candidates.map((ip) => `<option>${esc(ip)}</option>`).join("")}</select>` : ""}
+          <label class="small row" style="gap:4px"><input type="checkbox" id="lan-auto" ${lanSt.autostart ? "checked" : ""}> 以后启动软件时自动打开</label></div>`}
+    </div>
 
     <form class="card" id="asr-form">
       <div class="card-head"><h2>面试录音转文字（可选）</h2><span class="chip ${asrSt.ready ? "good" : ""}">${asrSt.ready ? "可用" : asrSt.installed ? "未填模型" : "未安装"}</span></div>
@@ -267,6 +285,10 @@ export async function render(el) {
     await apiPost("/api/settings", body);
     toast("已保存，之后的复习按新设置安排");
   };
+  const lanBtn = (id, fn) => { const b = el.querySelector(id); if (b) b.onclick = async () => { try { await fn(); render(el); } catch (e) { toast(e.message, 5000); } }; };
+  lanBtn("#lan-start", () => apiPost("/api/lan/start", { autostart: el.querySelector("#lan-auto")?.checked, ip: el.querySelector("#lan-ip")?.value || "" }));
+  lanBtn("#lan-stop", () => apiPost("/api/lan/stop"));
+  lanBtn("#lan-reset", async () => { await apiPost("/api/lan/reset"); toast("已重置，手机需要重新扫码"); });
   el.querySelector("#asr-form").onsubmit = async (e) => {
     e.preventDefault();
     await apiPost("/api/settings", { asr_model: el.querySelector("#asr_model").value.trim() });
