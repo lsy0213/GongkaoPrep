@@ -33,13 +33,28 @@ async function compose(plan) {
   return ids;
 }
 
+// 估分走势：每次模考 / 限时练习 / 真题整卷一个点，横线是目标分
+function trendSVG(items, target) {
+  if (items.length < 2) return "";
+  const W = 560, H = 160, P = 26;
+  const xs = (i) => P + (i * (W - 2 * P)) / (items.length - 1);
+  const ys = (v) => H - P - (v / 100) * (H - 2 * P);
+  const pts = items.map((x, i) => `${xs(i).toFixed(1)},${ys(x.score).toFixed(1)}`).join(" ");
+  return `<svg viewBox="0 0 ${W} ${H}" class="trend" role="img" aria-label="估分走势">
+    <line x1="${P}" x2="${W - P}" y1="${ys(target)}" y2="${ys(target)}" class="target"/>
+    <text x="${W - P}" y="${ys(target) - 4}" text-anchor="end" class="small">目标 ${target}</text>
+    <polyline points="${pts}" class="line"/>
+    ${items.map((x, i) => `<circle cx="${xs(i)}" cy="${ys(x.score)}" r="3.5"><title>${esc(x.created_at.slice(5, 16))} ${esc(x.title)}：${x.score} 分</title></circle>`).join("")}
+  </svg>`;
+}
+
 export async function render(el) {
-  const [meta, settings, st, sum] = await Promise.all([bankMeta(), apiGet("/api/settings"), apiGet("/api/stats"),
+  const [meta, settings, mh, sum] = await Promise.all([bankMeta(), apiGet("/api/settings"), apiGet("/api/mock/history"),
     apiPost("/api/bank/summary", {})]);
   let paper = PAPERS[0];
   let level = settings.paper_level || "地市级";
   let cleanup = null;
-  const history = st.sessions.filter((s) => s.mode === "exam" && s.title.startsWith("模考"));
+  const history = mh.items.slice().reverse();
 
   function setup() {
     const preview = planOf(level, paper.ratio, sum.modules);
@@ -61,15 +76,28 @@ export async function render(el) {
             <span class="small muted">时间按真实考试的“每题平均用时”折算</span></div>
         </div>
         <div class="card">
-          <h3 class="mb">模考记录</h3>
-          ${history.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>时间</th><th class="n">得分</th><th class="n">正确率</th></tr></thead><tbody>
-            ${history.slice(0, 12).map((s) => `<tr><td class="small">${esc(s.created_at.slice(5, 16))}</td><td class="n">${s.correct}/${s.total}</td><td class="n">${Math.round((s.correct / s.total) * 100)}%</td></tr>`).join("")}
+          <div class="card-head"><h3>估分走势</h3>
+            <form class="row" id="target-form" style="gap:6px"><span class="small muted">目标分</span>
+              <input type="number" id="target" min="40" max="100" value="${esc(mh.target)}" style="width:72px;padding:3px 6px">
+              <button class="btn sm ghost" type="submit">保存</button></form></div>
+          ${trendSVG(mh.items, mh.target) || `<p class="small muted">做满两次模考（或限时练习、真题整卷）后，这里画出估分走势。</p>`}
+          ${history.length ? `<div class="table-wrap mt"><table class="tbl"><thead><tr><th>时间</th><th>内容</th><th class="n">答对</th><th class="n">估分</th></tr></thead><tbody>
+            ${history.slice(0, 12).map((s) => `<tr><td class="small">${esc(s.created_at.slice(5, 16))}</td><td class="small">${esc(s.title)}</td><td class="n">${s.correct}/${s.total}</td>
+              <td class="n" style="${s.score >= mh.target ? "color:var(--good)" : ""}">${s.score}</td></tr>`).join("")}
           </tbody></table></div>` : `<div class="empty">还没有模考记录</div>`}
+          <p class="small muted">估分按常见口径（政治 0.7、常识 0.6、言语 0.8、数量 0.9、判断 0.8、资料 1.0 分/题的比例）折算成百分制，只用来看走势、和目标比较，不代表真实计分。</p>
           <hr class="sep">
           <p class="small ink2" style="margin:0">模考要点：中途不暂停、不查资料；交卷后先看各模块用时，再逐题复盘错因。详见教程
             <a href="#/learn/strategy-01">做题顺序与时间分配</a>。</p>
         </div>
       </div>`;
+    el.querySelector("#target-form").onsubmit = async (e) => {
+      e.preventDefault();
+      const v = Math.min(100, Math.max(40, +el.querySelector("#target").value || 70));
+      await apiPost("/api/settings", { target_score: String(v) });
+      mh.target = v;
+      setup();
+    };
     el.querySelectorAll("#papers button").forEach((x) => (x.onclick = () => { paper = PAPERS.find((p) => p.id === x.dataset.p); setup(); }));
     el.querySelectorAll("#levels button").forEach((x) => (x.onclick = () => { level = x.dataset.l; setup(); }));
     el.querySelector("#start").onclick = async () => {

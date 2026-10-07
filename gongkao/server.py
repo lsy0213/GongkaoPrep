@@ -315,6 +315,13 @@ class Handler(BaseHTTPRequestHandler):
             prompt = ai.build_request(kind, body, history)
         except ValueError as e:
             return self.send_json({"error": str(e)}, 400)
+        limit = int(float(settings.get("ai_monthly_tokens") or 0))
+        if limit > 0 and kind != "test":
+            with db() as conn:
+                used = conn.execute("SELECT COALESCE(SUM(input_tokens + output_tokens), 0) FROM ai_usage WHERE day >= ?",
+                                    (now_str()[:7] + "-01",)).fetchone()[0]
+            if used >= limit:
+                return self.send_json({"error": f"本月 AI 用量已达上限（{used} / {limit} tokens），可在设置里调高上限"}, 429)
         # 先取到第一段再发响应头：Key 错、地址错之类的问题能作为正常的错误返回给界面
         gen = ai.stream(settings, prompt)
         try:
@@ -342,6 +349,14 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:  # noqa: BLE001 —— 响应头已发出，只能把错误写进正文
             self.wfile.write(("\n\n[AI 出错] " + str(e)).encode("utf-8"))
             return
+        u = prompt.get("usage") or {}
+        with userdb.write_lock, db() as conn:
+            conn.execute(
+                "INSERT INTO ai_usage(day, provider, model, kind, input_tokens, output_tokens, estimated, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (now_str()[:10], u.get("provider"), u.get("model"), kind, u.get("input") or 0, u.get("output") or 0,
+                 1 if u.get("estimated") else 0, now_str()),
+            )
         if kind == "chat":
             with userdb.write_lock, db() as conn:
                 conn.execute(

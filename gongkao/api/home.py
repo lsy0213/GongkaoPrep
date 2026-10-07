@@ -77,6 +77,7 @@ def dashboard(ctx):
     minutes_total = conn.execute("SELECT COALESCE(SUM(minutes),0) FROM study_logs").fetchone()[0]
     due_wrong = conn.execute("SELECT COUNT(*) FROM wrongbook WHERE mastered=0 AND next_review<=?", (day,)).fetchone()[0]
     due_cards = conn.execute("SELECT COUNT(*) FROM cards WHERE due<=?", (day,)).fetchone()[0]
+    review = today_review(conn, due_wrong, due_cards)
     week = []
     for i in range(6, -1, -1):
         d = (today() - timedelta(days=i)).isoformat()
@@ -101,7 +102,23 @@ def dashboard(ctx):
         "due_cards": due_cards,
         "modules": module_stats(conn),
         "week": week,
+        "review": review,
     }
+
+
+def today_review(conn, due_wrong, due_cards):
+    """今日复习清单：到期错题、到期闪卡（受每天复习上限限制）、还能学的新卡、估计用时。"""
+    from .practice import review_settings
+
+    cfg = review_settings(conn)
+    day = today_str()
+    reviewed = conn.execute("SELECT COUNT(*) FROM cards WHERE last_review=? AND first_review<?", (day, day)).fetchone()[0]
+    new_today = conn.execute("SELECT COUNT(*) FROM cards WHERE first_review=?", (day,)).fetchone()[0]
+    cards_left = max(0, min(due_cards, cfg["review_cap"] - reviewed))
+    new_left = max(0, cfg["new_per_day"] - new_today)
+    minutes = round(due_wrong * 1.5 + cards_left * 0.2 + min(new_left, 20) * 0.4)
+    return {"wrong": due_wrong, "cards": cards_left, "cards_reviewed": reviewed, "new_left": new_left,
+            "new_today": new_today, "minutes": minutes}
 
 
 @route("GET", "/api/plan")

@@ -42,4 +42,4 @@ def find(method, path):
 
 def load_all():
     """导入所有接口模块（导入时完成登记）。"""
-    from . import home, notes, practice, reading, storage, system  # noqa: F401
+    from . import analysis, home, notes, practice, reading, storage, system  # noqa: F401

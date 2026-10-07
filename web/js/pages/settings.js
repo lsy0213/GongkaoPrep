@@ -55,6 +55,19 @@ export async function render(el) {
       <div class="row"><button class="btn primary" type="submit">保存</button></div>
     </form>
 
+    <form class="card" id="review">
+      <div class="card-head"><h2>复习节奏（闪卡、错题本）</h2><span class="chip">FSRS 记忆模型</span></div>
+      <div class="grid cols-2">
+        <label class="field">期望记忆率<select id="review_retention">${[["0.85", "85%（复习少，忘得多一点）"], ["0.9", "90%（推荐）"], ["0.95", "95%（考前冲刺，复习多）"]]
+          .map(([v, n]) => `<option value="${v}" ${Math.abs(+s.review_retention - +v) < 0.001 ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+        <label class="field">每天学新卡（张）<input type="number" id="new_cards_per_day" min="0" max="500" value="${esc(s.new_cards_per_day)}"></label>
+        <label class="field">每天复习上限（张）<input type="number" id="review_cap" min="10" max="5000" value="${esc(s.review_cap)}"></label>
+        <label class="field">错题间隔到多少天算掌握<input type="number" id="wrong_master_days" min="7" max="365" value="${esc(s.wrong_master_days)}"></label>
+      </div>
+      <p class="small muted">软件按你每次的打分估计每张卡、每道错题的记忆稳定性，在快要忘记（回忆概率降到期望记忆率）时安排复习。记忆率定得越高，复习越频繁。</p>
+      <div class="row"><button class="btn primary" type="submit">保存</button></div>
+    </form>
+
     <div class="card">
       <div class="card-head"><h2>外观</h2></div>
       <div class="seg" id="theme">${[["system", "跟随系统"], ["light", "浅色"], ["dark", "深色"]].map(([k, n]) => `<button data-t="${k}" class="${theme === k ? "active" : ""}">${n}</button>`).join("")}</div>
@@ -224,6 +237,13 @@ export async function render(el) {
     for (const k of ["nickname", "guokao_date", "shengkao_date", "start_date", "daily_hours", "paper_level"]) body[k] = el.querySelector("#" + k).value;
     await apiPost("/api/settings", body);
     toast("已保存，复习计划已按新设置调整");
+  };
+  el.querySelector("#review").onsubmit = async (e) => {
+    e.preventDefault();
+    const body = {};
+    for (const k of ["review_retention", "new_cards_per_day", "review_cap", "wrong_master_days"]) body[k] = el.querySelector("#" + k).value;
+    await apiPost("/api/settings", body);
+    toast("已保存，之后的复习按新设置安排");
   };
   el.querySelector("#lib").onsubmit = async (e) => {
     e.preventDefault();

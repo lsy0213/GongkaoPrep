@@ -3,17 +3,17 @@
 import json
 import os
 import threading
-from datetime import timedelta
+from datetime import date, timedelta
 
-from .. import qdb
+from .. import fsrs, qdb
 from ..paths import content_dir, load_content
+from ..scoring import estimate_score
 from ..userdb import DATA_DIR, now_str, rows, today
 from . import route
 from .home import log_minutes
 
-# 错题复习间隔（天）：做错后第 1、2、4、7、15、30 天各复习一次，全部答对即视为掌握
+# 老版本的固定间隔（天）：升级上来的错题、闪卡第一次按 FSRS 复习时，用它们折算记忆稳定性
 REVIEW_INTERVALS = [1, 2, 4, 7, 15, 30]
-# 闪卡盒子间隔（天）：认识就升一盒，不认识回到第 1 盒
 CARD_INTERVALS = [0, 1, 3, 7, 14, 30]
 
 MODULES = ["政治理论", "常识判断", "言语理解与表达", "数量关系", "判断推理", "资料分析"]
@@ -174,8 +174,49 @@ def bank_clear(ctx):
 
 # ---------------------------------------------------------------- 做题记录与错题本
 
+def review_settings(conn):
+    s = {r["key"]: r["value"] for r in conn.execute(
+        "SELECT key, value FROM settings WHERE key IN ('review_retention','new_cards_per_day','review_cap','wrong_master_days')")}
+
+    def num(k, default, lo, hi):
+        try:
+            return min(hi, max(lo, float(s.get(k) or default)))
+        except ValueError:
+            return default
+
+    return {"retention": num("review_retention", 0.9, 0.7, 0.97), "new_per_day": int(num("new_cards_per_day", 30, 0, 500)),
+            "review_cap": int(num("review_cap", 300, 10, 5000)), "master_days": int(num("wrong_master_days", 30, 7, 365))}
+
+
+def _wrong_memory(row):
+    """错题本里一道题的记忆状态；老数据（只有阶段）按原来的间隔折算。"""
+    if row is None:
+        return fsrs.Memory()
+    if row["stability"]:
+        return fsrs.Memory(stability=row["stability"], difficulty=row["difficulty"] or 5.0,
+                           last_review=row["last_review"] or (row["last_wrong_at"] or "")[:10],
+                           reps=row["reps"] or 0, lapses=row["wrong_count"] or 0)
+    stage = min(max(int(row["stage"] or 0), 0), len(REVIEW_INTERVALS) - 1)
+    days = REVIEW_INTERVALS[stage]
+    nxt = row["next_review"] or ""
+    try:
+        last = (date.fromisoformat(nxt) - timedelta(days=days)).isoformat()
+    except ValueError:
+        last = (row["last_wrong_at"] or today().isoformat())[:10]
+    return fsrs.Memory(stability=float(days), difficulty=_clamp(5.0 + 0.5 * (row["wrong_count"] or 1)),
+                       last_review=last, reps=stage, lapses=row["wrong_count"] or 0)
+
+
+def _clamp(d):
+    return min(10.0, max(1.0, d))
+
+
 def record_attempts(conn, payload):
-    """保存一次练习：写入 attempts，并更新错题本。"""
+    """保存一次练习：写入 attempts，并按 FSRS 更新错题本。
+
+    做错：记一次“重来”，明天复习；到期后做对：记一次“良好”，间隔按记忆稳定性拉长，
+    间隔达到“掌握天数”（默认 30 天）就算掌握。没到期就做对的不推进，避免同一天反复刷同一题就“掌握”。
+    """
     items = payload.get("items") or []
     mode = payload.get("mode") or "practice"
     created = now_str()
@@ -186,6 +227,7 @@ def record_attempts(conn, payload):
     )
     session_id = cur.lastrowid
     day = today()
+    cfg = review_settings(conn)
     for it in items:
         qid = str(it["qid"])
         ok = 1 if it.get("correct") else 0
@@ -196,33 +238,37 @@ def record_attempts(conn, payload):
         )
         row = conn.execute("SELECT * FROM wrongbook WHERE qid=?", (qid,)).fetchone()
         if not ok:
-            nxt = (day + timedelta(days=REVIEW_INTERVALS[0])).isoformat()
+            m, _due, _days = fsrs.review(_wrong_memory(row), fsrs.AGAIN, day, cfg["retention"], qid)
+            nxt = (day + timedelta(days=1)).isoformat()  # 做错的题明天再做
             if row:
                 conn.execute(
-                    "UPDATE wrongbook SET wrong_count=wrong_count+1, last_wrong_at=?, stage=0, "
-                    "next_review=?, mastered=0 WHERE qid=?",
-                    (created, nxt, qid),
+                    "UPDATE wrongbook SET wrong_count=wrong_count+1, last_wrong_at=?, stage=0, next_review=?, mastered=0, "
+                    "stability=?, difficulty=?, last_review=?, reps=? WHERE qid=?",
+                    (created, nxt, m.stability, m.difficulty, m.last_review, m.reps, qid),
                 )
             else:
                 conn.execute(
-                    "INSERT INTO wrongbook(qid, module, wrong_count, last_wrong_at, stage, next_review) "
-                    "VALUES (?, ?, 1, ?, 0, ?)",
-                    (qid, it.get("module"), created, nxt),
+                    "INSERT INTO wrongbook(qid, module, wrong_count, last_wrong_at, stage, next_review, stability, difficulty, "
+                    "last_review, reps) VALUES (?, ?, 1, ?, 0, ?, ?, ?, ?, ?)",
+                    (qid, it.get("module"), created, nxt, m.stability, m.difficulty, m.last_review, m.reps),
                 )
-        elif row and not row["mastered"]:
-            # 只有到期后答对才推进阶段，避免同一天反复刷同一题就“掌握”
-            if (row["next_review"] or "") <= day.isoformat():
-                stage = row["stage"] + 1
-                if stage >= len(REVIEW_INTERVALS):
-                    conn.execute("UPDATE wrongbook SET stage=?, mastered=1 WHERE qid=?", (stage, qid))
-                else:
-                    nxt = (day + timedelta(days=REVIEW_INTERVALS[stage])).isoformat()
-                    conn.execute("UPDATE wrongbook SET stage=?, next_review=? WHERE qid=?", (stage, nxt, qid))
+        elif row and not row["mastered"] and (row["next_review"] or "") <= day.isoformat():
+            m, due, days = fsrs.review(_wrong_memory(row), fsrs.GOOD, day, cfg["retention"], qid)
+            mastered = 1 if days >= cfg["master_days"] else 0
+            conn.execute(
+                "UPDATE wrongbook SET stage=stage+1, next_review=?, mastered=?, stability=?, difficulty=?, last_review=?, "
+                "reps=? WHERE qid=?",
+                (due.isoformat(), mastered, m.stability, m.difficulty, m.last_review, m.reps, qid),
+            )
     minutes = round(int(payload.get("duration") or 0) / 60)
     if minutes > 0:
         modules = {it.get("module") for it in items}
         log_minutes(conn, modules.pop() if len(modules) == 1 else "综合", minutes, "刷题")
-    return {"session_id": session_id, "correct": correct_n, "total": len(items)}
+    per = {}
+    for it in items:
+        ok_n, n = per.get(it.get("module"), (0, 0))
+        per[it.get("module")] = (ok_n + (1 if it.get("correct") else 0), n + 1)
+    return {"session_id": session_id, "correct": correct_n, "total": len(items), "score": estimate_score(per)}
 
 
 @route("POST", "/api/attempts")
@@ -304,31 +350,65 @@ def qnote(ctx):
 
 @route("GET", "/api/cards")
 def cards(ctx):
-    return {"items": rows(ctx.conn, "SELECT * FROM cards"), "today": ctx.day}
+    cfg = review_settings(ctx.conn)
+    new_today = ctx.conn.execute("SELECT COUNT(*) FROM cards WHERE first_review=?", (ctx.day,)).fetchone()[0]
+    reviewed_today = ctx.conn.execute("SELECT COUNT(*) FROM cards WHERE last_review=?", (ctx.day,)).fetchone()[0]
+    return {"items": rows(ctx.conn, "SELECT card_id, deck, box, due, reps, lapses, stability, difficulty, last_review "
+                                    "FROM cards"),
+            "today": ctx.day, "new_today": new_today, "new_limit": cfg["new_per_day"],
+            "reviewed_today": reviewed_today, "review_cap": cfg["review_cap"]}
+
+
+def _card_memory(row):
+    if row is None:
+        return fsrs.Memory()
+    if row["stability"]:
+        return fsrs.Memory(stability=row["stability"], difficulty=row["difficulty"] or 5.0,
+                           last_review=row["last_review"] or (row["updated_at"] or "")[:10],
+                           reps=row["reps"] or 0, lapses=row["lapses"] or 0)
+    return fsrs.from_leitner(row["box"], row["due"], row["updated_at"], row["reps"], row["lapses"], CARD_INTERVALS)
+
+
+def _rating(payload):
+    if payload.get("rating") is not None:
+        return int(payload["rating"])
+    return fsrs.GOOD if payload.get("known") else fsrs.AGAIN  # 老版本界面只有“认识 / 不认识”
 
 
 def review_card(conn, payload):
     card_id = str(payload["card_id"])
-    known = bool(payload.get("known"))
+    g = _rating(payload)
     row = conn.execute("SELECT * FROM cards WHERE card_id=?", (card_id,)).fetchone()
-    box = row["box"] if row else 1
-    reps = (row["reps"] if row else 0) + 1
-    lapses = (row["lapses"] if row else 0) + (0 if known else 1)
-    box = min(box + 1, len(CARD_INTERVALS) - 1) if known else 1
-    due = (today() + timedelta(days=CARD_INTERVALS[box])).isoformat()
+    cfg = review_settings(conn)
+    m, due, days = fsrs.review(_card_memory(row), g, today(), cfg["retention"], card_id)
+    box = min(len(CARD_INTERVALS) - 1, 1 + sum(1 for x in CARD_INTERVALS[1:] if days >= x)) if g > 1 else 1
     conn.execute(
-        "INSERT INTO cards(card_id, deck, box, due, reps, lapses, updated_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(card_id) DO UPDATE SET "
-        "box=excluded.box, due=excluded.due, reps=excluded.reps, lapses=excluded.lapses, "
-        "updated_at=excluded.updated_at",
-        (card_id, payload.get("deck"), box, due, reps, lapses, now_str()),
+        "INSERT INTO cards(card_id, deck, box, due, reps, lapses, updated_at, stability, difficulty, last_review, first_review) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(card_id) DO UPDATE SET "
+        "box=excluded.box, due=excluded.due, reps=excluded.reps, lapses=excluded.lapses, updated_at=excluded.updated_at, "
+        "stability=excluded.stability, difficulty=excluded.difficulty, last_review=excluded.last_review",
+        (card_id, payload.get("deck"), box, due.isoformat(), m.reps, m.lapses, now_str(), m.stability, m.difficulty,
+         m.last_review, today().isoformat()),
     )
-    return {"box": box, "due": due}
+    return {"box": box, "due": due.isoformat(), "days": days, "stability": round(m.stability, 2),
+            "difficulty": round(m.difficulty, 2), "last_review": m.last_review}
 
 
 @route("POST", "/api/cards/review")
 def cards_review(ctx):
     return review_card(ctx.conn, ctx.body)
+
+
+@route("POST", "/api/cards/preview", write=False)
+def cards_preview(ctx):
+    """几张卡各自四个打分的下次间隔（天）：{卡 id: {"1": 0, "2": 1, "3": 3, "4": 16}}。"""
+    ids = [str(i) for i in (ctx.body.get("ids") or [])][:200]
+    cfg = review_settings(ctx.conn)
+    have = {}
+    if ids:
+        q = ",".join("?" * len(ids))
+        have = {r["card_id"]: r for r in ctx.conn.execute(f"SELECT * FROM cards WHERE card_id IN ({q})", ids)}
+    return {i: fsrs.preview(_card_memory(have.get(i)), today(), cfg["retention"], i) for i in ids}
 
 
 @route("POST", "/api/speed")

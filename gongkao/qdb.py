@@ -125,6 +125,7 @@ class Bank:
         self.mem_mats = {}
         self.sources = []
         self.custom_count = 0
+        self._topics = None
 
     def _key(self, extra):
         return (stamp(DB_PATH), extra)
@@ -155,14 +156,42 @@ class Bank:
             conn.close()
         self.index = index
         self.key = key
+        self._topics = None
+
+    def topic_map(self):
+        """{题 id: 考点 id}（按题干关键词归类，见 topics.py）。第一次用到时算一遍，题库变了重算。"""
+        if self._topics is not None:
+            return self._topics
+        from . import topics
+
+        out = {}
+        for q in self.mem.values():
+            out[q["id"]] = topics.classify(q.get("module"), q.get("sub"), q.get("stem"), q.get("options"))
+        if DB_PATH.exists():
+            conn = connect()
+            for r in conn.execute("SELECT id, module, sub, stem, options FROM questions WHERE answer IS NOT NULL"):
+                opts = r["options"]
+                if isinstance(opts, str):
+                    try:
+                        opts = json.loads(opts)
+                    except ValueError:
+                        opts = None
+                out[r["id"]] = topics.classify(r["module"], r["sub"], r["stem"], opts)
+            conn.close()
+        self._topics = out
+        return out
 
     # ---- 统计
     def filtered(self, f):
         src, years, module, sub, source = (f.get("src") or "all", f.get("years") or "all", f.get("module") or "全部",
                                            f.get("sub") or "全部", f.get("source") or "")
+        topic = f.get("topic") or ""
+        tmap = self.topic_map() if topic else None
         max_year = max((r[4] for r in self.index if r[4]), default=0)
         out = []
         for r in self.index:
+            if tmap is not None and tmap.get(r[0]) != topic:
+                continue
             if source and r[5] != source:
                 continue
             if src == "builtin" and r[3] not in ("内置", "导入"):

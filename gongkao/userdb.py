@@ -38,6 +38,17 @@ DEFAULT_SETTINGS = {
     "ai_api_key": "",
     # 资料文件夹：真题、讲义、题册放在这里，软件只读取不修改
     "library_root": library.DEFAULT_ROOT if os.path.isdir(library.DEFAULT_ROOT) else "",
+    # 复习（FSRS）：期望记忆率、每天新卡上限、每天复习上限、错题间隔到多少天算掌握
+    "review_retention": "0.9",
+    "new_cards_per_day": "30",
+    "review_cap": "300",
+    "wrong_master_days": "30",
+    # 行测目标分（估分走势图上画一条线）
+    "target_score": "70",
+    # AI 用量：每月 token 上限（0 = 不限）；单价（元 / 百万 tokens，按服务商价目表自己填，空 = 不估算费用）
+    "ai_monthly_tokens": "0",
+    "ai_price_in": "",
+    "ai_price_out": "",
 }
 
 SCHEMA_V1 = """
@@ -120,10 +131,32 @@ def _add_columns(conn, table, cols):
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
 
 
+def _v3_fsrs(conn):
+    """闪卡、错题本改用 FSRS：记忆稳定性、难度、上次复习日；老数据在第一次复习时按原来的盒子/阶段折算。"""
+    _add_columns(conn, "cards", [("stability", "REAL"), ("difficulty", "REAL"), ("last_review", "TEXT"),
+                                 ("first_review", "TEXT")])
+    _add_columns(conn, "wrongbook", [("stability", "REAL"), ("difficulty", "REAL"), ("last_review", "TEXT"),
+                                     ("reps", "INTEGER DEFAULT 0")])
+    conn.execute("UPDATE cards SET first_review=substr(updated_at,1,10) WHERE first_review IS NULL")
+
+
+def _v4_ai(conn):
+    """AI 用量记录（看每月用了多少、设上限、估算费用）；申论批改的 AI 估分单独存一列，用来画走势。"""
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS ai_usage (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT, provider TEXT, model TEXT, kind TEXT,
+        input_tokens INTEGER, output_tokens INTEGER, estimated INTEGER, created_at TEXT);
+    CREATE INDEX IF NOT EXISTS ai_usage_day ON ai_usage(day);
+    """)
+    _add_columns(conn, "essays", [("ai_score", "REAL"), ("ai_full", "REAL")])
+
+
 # (版本号, 说明, 执行函数)。只能往后追加，不要改已有的步骤。
 MIGRATIONS = [
     (1, "初始表结构", lambda c: c.executescript(SCHEMA_V1)),
     (2, "统计、复习用的索引", lambda c: c.executescript(SCHEMA_V2_INDEXES)),
+    (3, "闪卡、错题本改用 FSRS", _v3_fsrs),
+    (4, "AI 用量记录、申论 AI 估分", _v4_ai),
 ]
 
 
@@ -313,7 +346,7 @@ USER_TABLES = [
     "settings", "sessions", "attempts", "wrongbook", "favorites", "qnotes", "tasks",
     "checkins", "study_logs", "essays", "interviews", "notebook", "cards",
     "speed_records", "reading_logs", "chats", "prefs", "lib_progress", "doc_progress", "doc_marks",
-    "doc_quiz", "memo_books", "memo_items",
+    "doc_quiz", "memo_books", "memo_items", "ai_usage",
 ]
 
 

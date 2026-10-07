@@ -43,8 +43,12 @@ def essay_save(ctx):
 
 @route("POST", "/api/essays/feedback")
 def essay_feedback(ctx):
-    ctx.conn.execute("UPDATE essays SET ai_feedback=? WHERE id=?", (ctx.body.get("ai_feedback") or "", ctx.body["id"]))
-    return {"ok": True}
+    from .. import ai
+
+    text = ctx.body.get("ai_feedback") or ""
+    score, full = ai.parse_essay_score(text)
+    ctx.conn.execute("UPDATE essays SET ai_feedback=?, ai_score=?, ai_full=? WHERE id=?", (text, score, full, ctx.body["id"]))
+    return {"ok": True, "ai_score": score, "ai_full": full}
 
 
 @route("GET", "/api/interviews")

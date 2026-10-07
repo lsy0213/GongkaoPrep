@@ -262,7 +262,8 @@ export async function runQuiz(el, { title, ids, mode = "practice", timeLimit = 0
       }));
     if (items.length) {
       try {
-        await apiPost("/api/attempts", { mode, title, duration, items });
+        const r = await apiPost("/api/attempts", { mode, title, duration, items });
+        st.score = r.score;
         refreshBadge();
       } catch (e) { toast("保存失败：" + e.message); }
     }
@@ -288,12 +289,14 @@ export async function runQuiz(el, { title, ids, mode = "practice", timeLimit = 0
         <div class="card">
           <div class="row" style="align-items:flex-end;gap:24px">
             <div><div class="score-big">${right.length}<small> / ${total} 题</small></div><div class="muted">正确率 ${pct}% · 用时 ${fmtClock(elapsed())}</div></div>
+            ${mode === "exam" && st.score != null ? `<div title="按常见估分口径（各模块每题分值比例）折算成百分制，只用来看走势，不代表真实计分">
+              <div class="score-big">${st.score}<small> 分</small></div><div class="muted">估分（百分制）· <a href="#/mock">看走势</a></div></div>` : ""}
             <span class="spacer"></span>
             <span class="chip ${pct >= 80 ? "good" : pct >= 60 ? "warn" : "bad"}">${pct >= 80 ? "很好，保持住" : pct >= 60 ? "还不错，看看错题" : "别灰心，先吃透错题"}</span>
           </div>
           <div class="table-wrap mt"><table class="tbl"><thead><tr><th>模块</th><th class="n">题数</th><th class="n">答对</th><th class="n">正确率</th><th class="n">用时</th><th class="n">平均每题</th></tr></thead>
           <tbody>${rows.map((r) => `<tr><td>${esc(r.m)}</td><td class="n">${r.n}</td><td class="n">${r.ok}</td><td class="n">${Math.round((r.ok / r.n) * 100)}%</td><td class="n">${fmtClock(r.sec)}</td><td class="n">${Math.round(r.sec / r.n)} 秒</td></tr>`).join("")}</tbody></table></div>
-          <p class="small muted">${wrongList.length ? `做错和未答的 ${wrongList.length} 道题已加入错题本，会在第 1、2、4、7、15、30 天提醒你复习。` : "全部答对！"}</p>
+          <p class="small muted">${wrongList.length ? `做错和未答的 ${wrongList.length} 道题已加入错题本，明天开始按记忆曲线（FSRS）提醒你复习，记得越牢间隔越长。` : "全部答对！"}</p>
           <div class="row mt">
             <button class="btn primary" data-review>逐题查看解析</button>
             ${onAgain ? `<button class="btn" data-again>再来一组</button>` : ""}

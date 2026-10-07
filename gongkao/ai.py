@@ -7,6 +7,7 @@
 
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 
@@ -73,6 +74,43 @@ SYSTEM = (
 
 class AIError(Exception):
     pass
+
+
+# 申论批改的固定评分细则：每次按同一套标准给分，分数才能前后比较、画走势
+ESSAY_RUBRIC = """请严格按下面的评分细则批改（国考 / 省考阅卷的常见做法，从严）：
+- 要点分（占满分的 70%）：把参考要点平均分配分值；答到给全分，答到一半给一半，没答到不给；要点之外的合理内容最多补 1 分。
+- 结构分（15%）：分条或分层清楚、有总括句、对策类有主体和措施对应。
+- 语言分（15%）：用规范的申论语言、简洁准确；照抄材料原句过多扣分。
+- 字数：超出字数上限的部分不给分；明显不足字数下限的，结构分和语言分减半。
+
+输出格式（第一行必须严格是这个格式，软件要读取分数）：
+【得分】x / {full}
+然后依次写：
+1. 一句话总评。
+2. 要点核对：逐条对照参考要点，标「已答到 / 部分答到 / 遗漏」，并写出这条给了几分。
+3. 结构分、语言分各给了几分，扣在哪里。
+4. 最影响得分的 2–4 个问题和可以直接照着改的修改建议。
+5. 示范：按要求重写一段高分作答（控制在字数要求内）。"""
+
+SCORE_LINE_RE = re.compile(r"【得分】\s*(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)")
+
+
+def parse_essay_score(text):
+    """从 AI 批改结果第一行读出 (得分, 满分)；读不到返回 (None, None)。"""
+    m = SCORE_LINE_RE.search((text or "")[:400])
+    if not m:
+        return None, None
+    score, full = float(m.group(1)), float(m.group(2))
+    if full <= 0 or score > full * 1.05:
+        return None, None
+    return min(score, full), full
+
+
+def estimate_tokens(text):
+    """服务商没返回用量时的估算：中文约 1.5 字一个 token，英文约 4 个字母一个 token。"""
+    text = text or ""
+    cjk = sum(1 for ch in text if "一" <= ch <= "鿿")
+    return int(cjk / 1.5 + (len(text) - cjk) / 4) + 1
 
 
 def config(settings):
@@ -142,20 +180,16 @@ def build_request(kind, body, history):
         answer = (body.get("answer") or "").strip()
         if not answer:
             raise ValueError("请先写下你的作答再请 AI 批改")
+        full = body.get("score") or 20
         content = (
             "请批改下面这道申论题的作答。\n\n"
             f"【给定资料（节选）】\n{materials}\n\n"
             f"【题目】{body.get('question')}\n"
             f"【作答要求】{body.get('requirement')}\n"
-            f"【满分】{body.get('score')} 分；【字数要求】{body.get('words')}\n\n"
+            f"【满分】{full} 分；【字数要求】{body.get('words')}\n\n"
             f"【参考要点】\n{points}\n\n"
             f"【考生作答】（共 {len(answer)} 字）\n{answer}\n\n"
-            "请按以下结构输出：\n"
-            "1. 估分：给出分数和一句话总评（按省考/国考阅卷常见标准，从严）。\n"
-            "2. 要点覆盖：逐条对照参考要点，标明「已答到 / 部分答到 / 遗漏」。\n"
-            "3. 主要问题：审题、结构、语言、字数等方面最影响得分的 2–4 个问题。\n"
-            "4. 修改建议：可以直接照着改的具体建议。\n"
-            "5. 示范：给出一段按要求重写的高分作答（控制在字数要求内）。"
+            + ESSAY_RUBRIC.format(full=full)
         )
         return {"messages": [{"role": "user", "content": content}], "effort": "high"}
 
@@ -278,18 +312,24 @@ def _http_hint(code):
 
 
 def stream(settings, req):
-    """逐段产出回答文本。"""
+    """逐段产出回答文本。用量（tokens）写进 req["usage"]：服务商返回了就用返回的，没返回按字数估算。"""
     cfg = config(settings)
     problem = _problem(cfg)
     if problem:
         raise AIError(problem)
-    if cfg["type"] == "anthropic":
-        yield from _stream_anthropic(cfg, req)
-    else:
-        yield from _stream_openai(cfg, req)
+    usage = req.setdefault("usage", {})
+    usage.update(provider=cfg["provider"], model=cfg["model"], input=0, output=0, estimated=True)
+    out = []
+    gen = _stream_anthropic(cfg, req) if cfg["type"] == "anthropic" else _stream_openai(cfg, req)
+    for piece in gen:
+        out.append(piece)
+        yield piece
+    if not usage.get("input") and not usage.get("output"):
+        prompt = SYSTEM + "".join(m["content"] for m in req["messages"])
+        usage.update(input=estimate_tokens(prompt), output=estimate_tokens("".join(out)), estimated=True)
 
 
-def _stream_openai(cfg, req):
+def _openai_request(cfg, req, with_usage):
     base = cfg["base_url"].rstrip("/")
     url = base if base.endswith("/chat/completions") else base + "/chat/completions"
     body = {
@@ -297,7 +337,9 @@ def _stream_openai(cfg, req):
         "messages": [{"role": "system", "content": SYSTEM}] + req["messages"],
         "stream": True,
     }
-    request = urllib.request.Request(
+    if with_usage:
+        body["stream_options"] = {"include_usage": True}  # 最后一段带上用量
+    return urllib.request.Request(
         url,
         data=json.dumps(body).encode("utf-8"),
         headers={
@@ -307,8 +349,24 @@ def _stream_openai(cfg, req):
         },
         method="POST",
     )
+
+
+def _record_usage(req, u):
+    if not u:
+        return
+    req["usage"].update(input=int(u.get("prompt_tokens") or u.get("input_tokens") or 0),
+                        output=int(u.get("completion_tokens") or u.get("output_tokens") or 0), estimated=False)
+
+
+def _stream_openai(cfg, req):
     try:
-        resp = urllib.request.urlopen(request, timeout=TIMEOUT)
+        try:
+            resp = urllib.request.urlopen(_openai_request(cfg, req, True), timeout=TIMEOUT)  # noqa: S310
+        except urllib.error.HTTPError as e:
+            if e.code not in (400, 422):
+                raise
+            # 有的兼容接口不认识 stream_options：去掉再试一次
+            resp = urllib.request.urlopen(_openai_request(cfg, req, False), timeout=TIMEOUT)  # noqa: S310
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", errors="ignore")[:300]
         raise AIError(f"{_http_hint(e.code)}\n（HTTP {e.code}）{detail}") from e
@@ -328,6 +386,7 @@ def _stream_openai(cfg, req):
                 choice = (data.get("choices") or [{}])[0]
                 yield (choice.get("message") or {}).get("content") or ""
                 finish = choice.get("finish_reason")
+                _record_usage(req, data.get("usage"))
             else:
                 for raw in resp:
                     line = raw.decode("utf-8", errors="ignore").strip()
@@ -342,6 +401,7 @@ def _stream_openai(cfg, req):
                         continue
                     if obj.get("error"):
                         raise AIError(f"接口返回错误：{obj['error']}")
+                    _record_usage(req, obj.get("usage"))
                     for ch in obj.get("choices") or []:
                         piece = (ch.get("delta") or {}).get("content")
                         if piece:
@@ -391,6 +451,10 @@ def _stream_anthropic(cfg, req):
             for text in stream_obj.text_stream:
                 yield text
             final = stream_obj.get_final_message()
+            u = getattr(final, "usage", None)
+            if u is not None:
+                _record_usage(req, {"input_tokens": getattr(u, "input_tokens", 0),
+                                    "output_tokens": getattr(u, "output_tokens", 0)})
             if final.stop_reason == "refusal":
                 yield "\n\n（AI 拒绝回答了这个请求，请换个问法再试。）"
             elif final.stop_reason == "max_tokens":

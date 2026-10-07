@@ -35,12 +35,13 @@ export async function render(el, ctx) {
     timed: ctx.query.auto ? false : !!saved.timed,
     src: ctx.query.src === "real" ? "国考" : (ctx.query.src || (ctx.query.auto ? "all" : saved.src) || "all"),
     years: saved.years || "all",
+    topic: ctx.query.topic || "", topicName: ctx.query.tname || "",  // 从“弱项诊断”进来：只出这个考点的题
   };
   const sources = SOURCES.filter((x) => x.id === "all" || x.id === "builtin" || c[x.id]);
   if (!sources.some((x) => x.id === st.src)) st.src = "all";
   let cleanup = null;
 
-  const filter = () => ({ src: st.src, years: st.years, module: st.module, sub: st.sub, order: st.order });
+  const filter = () => ({ src: st.src, years: st.years, module: st.module, sub: st.sub, order: st.order, topic: st.topic });
 
   async function setup() {
     const sum = await apiPost("/api/bank/summary", filter());
@@ -56,6 +57,8 @@ export async function render(el, ctx) {
         ${sources.length > 2 ? `<div class="row" style="margin-bottom:14px"><h3 style="margin:0">题目来源</h3>
           <div class="seg" id="srcs">${sources.map((x) => `<button data-src="${x.id}" class="${st.src === x.id ? "active" : ""}">${x.name}</button>`).join("")}</div>
           ${st.src !== "builtin" ? `<select id="years" style="width:auto">${YEARS.map((y) => `<option value="${y.id}" ${st.years === y.id ? "selected" : ""}>${y.name}</option>`).join("")}</select>` : ""}</div>` : ""}
+        ${st.topic ? `<div class="row mb"><span class="chip warn">只练考点：${esc(st.topicName || st.topic)}</span>
+          <button class="btn sm ghost" id="clear-topic">不限考点</button></div>` : ""}
         <h3 style="margin-bottom:10px">模块</h3>
         <div class="pick" id="mods">
           <button data-m="全部" class="${st.module === "全部" ? "active" : ""}">全部模块<small>${sum.total} 题</small></button>
@@ -96,13 +99,15 @@ export async function render(el, ctx) {
     const ys = el.querySelector("#years");
     if (ys) ys.onchange = () => { st.years = ys.value; setup(); };
     el.querySelector("#start").onclick = start;
+    const ct = el.querySelector("#clear-topic");
+    if (ct) ct.onclick = () => { st.topic = ""; st.topicName = ""; setup(); };
   }
 
   async function start() {
     if (!ctx.query.auto) store.set("practice", { module: st.module, count: st.count, order: st.order, timed: st.timed, src: st.src, years: st.years });
     const ids = await pickQuestions({ ...filter(), count: st.count });
     const srcName = st.src === "国考" || st.src === "四川" ? st.src + "真题 · " : st.src === "千题册" ? "题册 · " : "";
-    const title = `${srcName}${st.module === "全部" ? "综合" : st.module}${st.sub !== "全部" ? " · " + st.sub : ""} · ${ids.length} 题`;
+    const title = `${srcName}${st.module === "全部" ? "综合" : st.module}${st.sub !== "全部" ? " · " + st.sub : ""}${st.topic ? " · " + (st.topicName || st.topic) : ""} · ${ids.length} 题`;
     cleanup = await runQuiz(el, {
       title, ids, mode: st.timed ? "exam" : "practice", timeLimit: st.timed ? ids.length * 60 : 0,
       onAgain: () => { cleanup?.(); start(); },

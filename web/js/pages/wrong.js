@@ -3,7 +3,6 @@ import { runQuiz } from "../quiz.js";
 import { refreshBadge } from "../app.js";
 
 const REASONS = ["", "概念不清", "方法不会", "审题错误", "计算失误", "时间不够", "粗心"];
-const STAGE_DAYS = [1, 2, 4, 7, 15, 30];
 
 export async function render(el) {
   const [wb, progress] = await Promise.all([apiGet("/api/wrongbook"), apiGet("/api/progress")]);
@@ -41,7 +40,7 @@ export async function render(el) {
         <span class="chip brand">${MODULE_SHORT[q.module] || esc(q.module)}</span>
         ${q.real ? `<span class="chip">${esc(srcLabel(q))} · 第 ${q.num} 题</span>` : ""}
         ${x.fav ? "" : `<span class="small muted">错 ${x.wrong_count} 次 · ${x.mastered ? "已掌握" : x.next_review <= wb.today ? `<b style="color:var(--bad)">今天该复习</b>` : `下次复习 ${esc(x.next_review)}`}
-          · 复习进度 ${Math.min(x.stage, STAGE_DAYS.length)}/${STAGE_DAYS.length}</span>`}
+          · ${x.stability ? `记忆稳定性约 ${x.stability < 1 ? "不到 1" : Math.round(x.stability)} 天` : `已复习 ${x.stage} 次`}</span>`}
         <span class="spacer"></span>
         ${x.fav ? "" : `<select data-reason="${esc(x.qid)}" aria-label="错因" style="width:auto;padding:3px 8px;font-size:13px">
           ${REASONS.map((r) => `<option value="${r}" ${r === (x.reason || "") ? "selected" : ""}>${r || "选择错因"}</option>`).join("")}</select>`}
@@ -63,7 +62,7 @@ export async function render(el) {
     const xs = list();
     el.innerHTML = `
       <div class="page-head"><div><div class="eyebrow">错题本</div><h1>错题比新题更值得做</h1>
-        <p>做错的题按 1、2、4、7、15、30 天的间隔安排复习，到期复习答对就前进一格，全部通过即视为掌握。</p></div>
+        <p>做错的题第二天复习；之后按 FSRS 记忆模型安排：每次到期做对，间隔就按你对这道题的记忆稳定性拉长，间隔超过设置里的天数（默认 30 天）即视为掌握，再做错会重新开始。</p></div>
         <div class="row">
           <button class="btn primary lg" id="review" ${due.length ? "" : "disabled"}>${due.length ? `复习今天到期的 ${due.length} 题` : "今天没有到期的错题"}</button>
         </div></div>

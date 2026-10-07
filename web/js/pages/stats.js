@@ -21,8 +21,40 @@ function heatmap(heat, checkins) {
   return `<div class="heat">${cells}</div>`;
 }
 
+// 弱项诊断：最近正确率低的考点，配上教程的课和“练 20 题”
+function weakCard(a) {
+  const done = a.topics.filter((t) => t.n);
+  const body = a.weak.length
+    ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>考点</th><th class="n">做过</th><th class="n">最近正确率</th><th class="n">平均用时</th><th>补救</th></tr></thead><tbody>
+      ${a.weak.map((t) => `<tr><td><b>${esc(t.name)}</b><div class="small muted">${esc(t.module)}</div></td><td class="n">${t.n}</td>
+        <td class="n" style="color:var(--bad)">${t.recent_acc}%</td><td class="n">${t.avg_sec != null ? t.avg_sec + " 秒" : "—"}</td>
+        <td><a class="btn sm" href="#/learn/${esc(t.lesson)}" title="${esc(t.lesson_title)}">学：${esc((t.lesson_title || "").slice(0, 14))}</a>
+          <a class="btn sm primary" href="#/practice?module=${encodeURIComponent(t.module)}&topic=${encodeURIComponent(t.id)}&tname=${encodeURIComponent(t.name)}&count=20&auto=1">练 20 题</a></td></tr>`).join("")}
+      </tbody></table></div>`
+    : `<p class="small muted">${done.length ? "目前没有明显的弱项（做过 5 题以上、最近正确率低于 70% 的考点会列在这里）。" : "做题多了以后，这里按考点找出你最容易错的地方，并告诉你该学哪一课、练哪类题。"}</p>`;
+  const all = done.length ? `<details class="mt"><summary class="small" style="cursor:pointer">全部考点（${done.length} 个做过）</summary>
+    <div class="table-wrap mt"><table class="tbl small"><thead><tr><th>考点</th><th>模块</th><th class="n">做过</th><th class="n">正确率</th><th class="n">最近</th><th class="n">题库</th></tr></thead><tbody>
+    ${done.sort((x, y) => (x.recent_acc ?? 101) - (y.recent_acc ?? 101)).map((t) => `<tr><td><a href="#/learn/${esc(t.lesson)}">${esc(t.name)}</a></td><td>${esc(t.module)}</td>
+      <td class="n">${t.n}</td><td class="n">${t.acc}%</td><td class="n">${t.recent_acc}%</td><td class="n">${t.available}</td></tr>`).join("")}</tbody></table></div></details>` : "";
+  return `<div class="card mt"><div class="card-head"><h2>弱项诊断（按考点）</h2><span class="small muted">看最近 20 次作答</span></div>${body}${all}</div>`;
+}
+
+// 用时：每个题型的平均用时和参考用时、超时比例；“慢而对”说明方法不熟，“快而错”说明审题太急
+function timeCard(a) {
+  if (!a.subs.length) return "";
+  const order = a.order.length >= 2 ? `<p class="small ink2 mt">按你的数据，<b>每分钟能拿到的分</b>从高到低是：${a.order.map((o) => `${esc(o.module)}（${o.per_min}）`).join(" → ")}。
+      考场上可以按这个顺序做，把最“值钱”的时间先花在高效模块上；排在最后的模块留到最后、做不完就蒙。详见教程 <a href="#/learn/strategy-01">做题顺序与时间分配</a>。</p>` : "";
+  return `<div class="card mt"><div class="card-head"><h2>做题用时分析</h2><span class="small muted">限时、模考和练习里有计时的题</span></div>
+    <div class="table-wrap"><table class="tbl"><thead><tr><th>题型</th><th class="n">题数</th><th class="n">正确率</th><th class="n">平均用时</th><th class="n">参考</th><th class="n">超时</th><th class="n">慢而对</th><th class="n">快而错</th></tr></thead><tbody>
+    ${a.subs.map((r) => `<tr><td>${esc(r.sub)}<div class="small muted">${esc(r.module)}</div></td><td class="n">${r.n}</td><td class="n">${r.acc}%</td>
+      <td class="n" style="${r.avg_sec > r.target * 1.3 ? "color:var(--bad)" : ""}">${r.avg_sec} 秒</td><td class="n muted">${r.target} 秒</td>
+      <td class="n">${r.over_pct}%</td><td class="n">${r.slow_right}</td><td class="n">${r.fast_wrong}</td></tr>`).join("")}
+    </tbody></table></div>
+    <p class="small muted">超时 = 用时超过参考用时的 1.5 倍。“慢而对”多：方法会但不熟，多练速算和套路；“快而错”多：审题太急，先看清问法再选。</p>${order}</div>`;
+}
+
 export async function render(el) {
-  const s = await apiGet("/api/stats");
+  const [s, a] = await Promise.all([apiGet("/api/stats"), apiGet("/api/analysis").catch(() => null)]);
   const totalQ = s.modules.reduce((a, m) => a + m.total, 0);
   const totalOk = s.modules.reduce((a, m) => a + m.correct, 0);
   const totalMin = s.minutes_by_module.reduce((a, m) => a + m.minutes, 0);
@@ -73,6 +105,8 @@ export async function render(el) {
         <div class="small muted">颜色越深学习时间越长，黄框表示当天打了卡。</div>
       </div>
     </div>
+
+    ${a ? weakCard(a) + timeCard(a) : ""}
 
     <div class="card mt">
       <div class="card-head"><h2>最近的练习</h2></div>

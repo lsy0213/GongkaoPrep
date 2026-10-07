@@ -10,6 +10,21 @@ function ring(done, total) {
 
 const MODULE_ICON_ORDER = MODULES;
 
+// 今日复习：错题、闪卡（FSRS 到期的）、还能学的新卡，一张卡片列全
+function reviewCard(r) {
+  if (!r) return "";
+  const nothing = !r.wrong && !r.cards;
+  return `<div class="card">
+    <div class="card-head"><h3>今日复习</h3><span class="small muted">${nothing ? "到期的都复习完了" : `约 ${Math.max(1, r.minutes)} 分钟`}</span></div>
+    <div class="review-rows">
+      <a class="review-row ${r.wrong ? "due" : ""}" href="#/wrong"><span>错题重做</span><b class="num">${r.wrong}</b><small>题到期</small></a>
+      <a class="review-row ${r.cards ? "due" : ""}" href="#/cards"><span>闪卡复习</span><b class="num">${r.cards}</b><small>张到期${r.cards_reviewed ? ` · 已复习 ${r.cards_reviewed}` : ""}</small></a>
+      <a class="review-row" href="#/cards"><span>新卡</span><b class="num">${r.new_left}</b><small>张可学${r.new_today ? ` · 今天已学 ${r.new_today}` : ""}</small></a>
+    </div>
+    <p class="small muted" style="margin:8px 0 0">先复习到期的，再学新的；间隔由 FSRS 记忆模型按你的打分安排。</p>
+  </div>`;
+}
+
 export async function render(el) {
   const [d, lib] = await Promise.all([apiGet("/api/dashboard"), content("materials.json")]);
   const quotes = lib.themes.flatMap((t) => t.quotes);
@@ -97,6 +112,7 @@ export async function render(el) {
     </div>
 
     <div class="stack" style="gap:16px">
+      ${reviewCard(d.review)}
       <div class="card">
         <div class="card-head"><h3>今日一句</h3><a class="small" href="#/notes">素材库</a></div>
         <p class="daily-quote">${esc(quote.text)}</p>

@@ -1,11 +1,22 @@
 import { apiGet, apiPost, esc, mathText, shuffle, todayISO, toast } from "../lib.js";
 
 const SESSION = 20;
+const RATINGS = [[1, "重来", "danger"], [2, "困难", ""], [3, "良好", "primary"], [4, "简单", ""]];
+
+// 下次间隔的说法：0 → 今天再看，3 → 3 天，45 → 1.5 个月
+function ivl(d) {
+  if (d == null) return "";
+  if (d <= 0) return "今天再看";
+  if (d < 30) return `${d} 天`;
+  if (d < 365) return `${Math.round(d / 3) / 10} 个月`.replace(".0 ", " ");
+  return `${Math.round(d / 36.5) / 10} 年`.replace(".0 ", " ");
+}
 
 export async function render(el) {
   // 内置卡组 + 从资料库背诵材料里生成的卡组
   const data = await apiGet("/api/decks");
   let state = {}, today = todayISO(), notes = [], memo = { books: [], items: [] };
+  let quota = { new_today: 0, new_limit: 30, reviewed_today: 0, review_cap: 300 };
   let keyHandler = null;
 
   async function load() {
@@ -13,6 +24,7 @@ export async function render(el) {
     memo = m;
     state = Object.fromEntries(c.items.map((x) => [x.card_id, x]));
     today = c.today;
+    quota = { new_today: c.new_today || 0, new_limit: c.new_limit ?? 30, reviewed_today: c.reviewed_today || 0, review_cap: c.review_cap ?? 300 };
     notes = n.items;
   }
 
@@ -39,7 +51,7 @@ export async function render(el) {
       const s = state[c.id];
       if (!s) fresh++;
       else if (s.due <= today) due++;
-      if (s && s.box >= 3) learned++;
+      if (s && (s.stability ? s.stability >= 21 : s.box >= 4)) learned++;
     }
     return { fresh, due, learned };
   }
@@ -49,7 +61,8 @@ export async function render(el) {
     const totalDue = ds.reduce((a, d) => a + stats(d).due, 0);
     el.innerHTML = `
       <div class="page-head"><div><div class="eyebrow">闪卡记忆</div><h1>碎片时间刷闪卡</h1>
-        <p>认识就升一级，复习间隔依次拉长到 1、3、7、14、30 天；不认识就回到第一级，明天再见。</p></div>
+        <p>翻面后按记得的程度打分（重来 / 困难 / 良好 / 简单），软件用 FSRS 记忆模型算出每张卡最合适的下次复习时间：
+          记得越牢间隔越长，忘了就很快再见。今天还能学新卡 ${Math.max(0, quota.new_limit - quota.new_today)} 张（每天 ${quota.new_limit} 张，可在设置里改）。</p></div>
         <button class="btn primary lg" id="all" ${totalDue ? "" : "disabled"}>${totalDue ? `复习全部到期 ${totalDue} 张` : "今天没有到期的卡片"}</button></div>
       <div class="grid cols-3">
         ${ds.map((d) => {
@@ -72,9 +85,12 @@ export async function render(el) {
   }
 
   function study(title, cards) {
-    const due = shuffle(cards.filter((c) => state[c.id] && state[c.id].due <= today));
-    const fresh = cards.filter((c) => !state[c.id]);
+    const due = shuffle(cards.filter((c) => state[c.id] && state[c.id].due <= today))
+      .slice(0, Math.max(0, quota.review_cap - quota.reviewed_today));
+    const newLeft = Math.max(0, quota.new_limit - quota.new_today);
+    const fresh = cards.filter((c) => !state[c.id]).slice(0, newLeft);
     let queue = due.concat(fresh).slice(0, SESSION);
+    if (!queue.length && cards.some((c) => !state[c.id]) && !newLeft) toast(`今天的新卡已经学满 ${quota.new_limit} 张，先随机抽查学过的`, 3500);
     if (!queue.length) queue = shuffle(cards).slice(0, SESSION); // 全部背过了就随机抽查
     let i = 0, flipped = false, known = 0, busy = false;
     const results = new Map(); // card.id → { card, first, last, misses }，本轮结束时做回顾
@@ -89,27 +105,40 @@ export async function render(el) {
       <div class="flash">
         <div class="flash-stage">
           <div class="flash-card" id="card" tabindex="0" role="button" aria-label="翻面">
-            <span class="flash-stamp no">不认识</span><span class="flash-stamp yes">认识</span>
+            <span class="flash-stamp no">重来</span><span class="flash-stamp yes">良好</span>
             <div class="flash-inner">
               <div class="flash-face flash-front"><div class="front" id="qf"></div><div class="small muted mt">先在心里回答，再按空格或点击卡片翻面</div></div>
               <div class="flash-face flash-back"><div class="q" id="qb"></div><div class="back" id="ab"></div></div>
             </div>
           </div>
         </div>
-        <div class="flash-actions">
-          <button class="btn lg danger" id="no">← 不认识</button>
+        <div class="flash-actions" id="acts-front">
           <button class="btn lg" id="flip">翻面 <span class="kbd">空格</span></button>
-          <button class="btn lg primary" id="yes">认识 →</button>
         </div>
-        <p class="small muted flash-tip">空格 翻面 · ← 不认识 · → 认识 · 也可以翻面后直接把卡片左右拖走</p>
+        <div class="flash-actions rate" id="acts-back" hidden>
+          ${RATINGS.map(([g, name, cls]) => `<button class="btn lg ${cls}" data-rate="${g}"><b>${name}</b><small data-ivl="${g}"></small><span class="kbd">${g}</span></button>`).join("")}
+        </div>
+        <p class="small muted flash-tip">空格 翻面 · 1–4 打分 · ← 重来 · → 良好 · 也可以翻面后把卡片左右拖走</p>
       </div>`;
     const card = el.querySelector("#card");
-    const btnNo = el.querySelector("#no"), btnYes = el.querySelector("#yes");
+    const front = el.querySelector("#acts-front"), back = el.querySelector("#acts-back");
+    const previews = new Map();
 
     function setFlipped(v) {
       flipped = v;
       card.classList.toggle("flipped", v);
-      btnNo.disabled = btnYes.disabled = !v;
+      front.hidden = v;
+      back.hidden = !v;
+    }
+
+    // 四个打分各自的下次间隔，翻面前就向服务器要好
+    async function loadPreview(c) {
+      if (!previews.has(c.id)) {
+        try { previews.set(c.id, (await apiPost("/api/cards/preview", { ids: [c.id] }))[c.id]); } catch { previews.set(c.id, null); }
+      }
+      if (queue[i]?.id !== c.id) return;
+      const p = previews.get(c.id);
+      el.querySelectorAll("[data-ivl]").forEach((x) => (x.textContent = p ? ivl(p[x.dataset.ivl]) : ""));
     }
 
     function draw() {
@@ -121,7 +150,9 @@ export async function render(el) {
       el.querySelector("#qb").textContent = c.front;
       if (c.math) el.querySelector("#ab").innerHTML = mathText(c.back);
       else el.querySelector("#ab").textContent = c.back;
+      el.querySelectorAll("[data-ivl]").forEach((x) => (x.textContent = ""));
       setFlipped(false);
+      loadPreview(c);
     }
 
     // 换卡：旧卡带着倾斜甩出去，新卡从下方浮上来（翻回正面的过程不做动画）
@@ -141,12 +172,19 @@ export async function render(el) {
       }, OUT_MS);
     }
 
-    function answer(ok) {
+    function answer(g) {
       if (busy || !flipped) return;
       const c = queue[i];
-      apiPost("/api/cards/review", { card_id: c.id, deck: c.deck, known: ok })
-        .then((r) => { state[c.id] = { ...(state[c.id] || {}), box: r.box, due: r.due }; })
+      const ok = g > 1;
+      const wasNew = !state[c.id];
+      apiPost("/api/cards/review", { card_id: c.id, deck: c.deck, rating: g })
+        .then((r) => {
+          state[c.id] = { ...(state[c.id] || {}), box: r.box, due: r.due, stability: r.stability, last_review: r.last_review };
+          if (wasNew) quota.new_today++;
+          else quota.reviewed_today++;
+        })
         .catch((e) => toast(e.message));
+      previews.delete(c.id);
       const r = results.get(c.id) || { card: c, first: ok, misses: 0 };
       r.last = ok;
       if (!ok) r.misses++;
@@ -182,7 +220,7 @@ export async function render(el) {
       drag = null;
       card.style.removeProperty("--no"); card.style.removeProperty("--yes");
       if (!moved) return flip();
-      if (flipped && Math.abs(dx) >= SWIPE_PX) return answer(dx > 0);
+      if (flipped && Math.abs(dx) >= SWIPE_PX) return answer(dx > 0 ? 3 : 1);
       card.classList.remove("dragging");
       card.style.transform = "";
     };
@@ -191,8 +229,7 @@ export async function render(el) {
 
     el.querySelector("#back").onclick = () => { cleanupKeys(); load().then(home); };
     el.querySelector("#flip").onclick = flip;
-    btnYes.onclick = () => answer(true);
-    btnNo.onclick = () => answer(false);
+    el.querySelectorAll("[data-rate]").forEach((b) => (b.onclick = () => answer(+b.dataset.rate)));
 
     async function finish() {
       cleanupKeys();
@@ -208,7 +245,7 @@ export async function render(el) {
           <div class="recap-a">${r.card.math ? mathText(r.card.back) : esc(r.card.back)}</div></details>`;
       el.innerHTML = `
         <div class="page-head"><div><div class="eyebrow">本轮回顾 · ${esc(title)}</div><h1>${missed.length ? "把不认识的再过一眼" : "全部认识，漂亮"}</h1>
-          <p>不认识的卡已回到第一级，明天会再出现；认识的按间隔往后排。</p></div></div>
+          <p>点了“重来”的卡很快会再出现；记住的按 FSRS 算出的间隔往后排，记得越牢排得越远。</p></div></div>
         <div class="grid cols-4 mb">
           <div class="stat"><div class="v num">${all.length}<small>张</small></div><div class="k">本轮卡片</div></div>
           <div class="stat"><div class="v num">${got.length}<small>张</small></div><div class="k">一次认识</div></div>
@@ -246,8 +283,9 @@ export async function render(el) {
         if (document.activeElement?.tagName === "BUTTON") document.activeElement.blur(); // 防止再触发一次聚焦的按钮
         flip();
       }
-      else if (e.key === "ArrowLeft" || e.key === "1") { e.preventDefault(); flipped ? answer(false) : flip(); }
-      else if (e.key === "ArrowRight" || e.key === "2") { e.preventDefault(); flipped ? answer(true) : flip(); }
+      else if (["1", "2", "3", "4"].includes(e.key)) { e.preventDefault(); flipped ? answer(+e.key) : flip(); }
+      else if (e.key === "ArrowLeft") { e.preventDefault(); flipped ? answer(1) : flip(); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); flipped ? answer(3) : flip(); }
     };
     document.addEventListener("keydown", keyHandler);
     draw();
