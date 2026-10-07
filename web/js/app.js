@@ -44,7 +44,7 @@ navSecs.forEach((s) => setFolded(s, !!folded?.includes(s.dataset.sec)));
 const ROUTES = {
   "": "home", plan: "plan", learn: "learn", notes: "notes", cards: "cards", practice: "practice",
   mock: "mock", speed: "speed", essay: "essay", interview: "interview", wrong: "wrong", memo: "memo", real: "real", library: "library", news: "news",
-  stats: "stats", ai: "ai", settings: "settings", resume: "resume",
+  stats: "stats", ai: "ai", settings: "settings", resume: "resume", positions: "positions",
 };
 
 const view = document.getElementById("view");

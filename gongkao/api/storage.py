@@ -13,6 +13,8 @@ from . import route
 PARTS = [
     ("app", "学习记录", "app.db", "做题、错题、笔记、设置等，最重要", False),
     ("backups", "自动备份", "backups", "每天一份，保留 7 天；导入、恢复前的快照", False),
+    ("recordings", "面试录音", "recordings", "面试练习的录音", False),
+    ("positions", "职位表", "positions.db", "导入的国考 / 省考职位表", False),
     ("docs", "资料库文档", "library/docs.db", "讲义、笔记整理成的文字", False),
     ("shizheng", "时政晨读", "library/shizheng.db", "时政合集整理成的文字", False),
     ("questions", "真题题库", "library/questions.db", "真题卷、千题册", False),

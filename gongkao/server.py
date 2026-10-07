@@ -39,7 +39,12 @@ SESSION_COOKIE = "gk_session"
 # 不需要会话的接口：启动时检查是否已经在运行
 PUBLIC_API = {"/api/ping"}
 # 收二进制请求体的接口（面试录音）
-UPLOAD_API = {"/api/interviews/audio"}
+# 路径 → 允许的 Content-Type 前缀。这些都不是浏览器“简单请求”的类型，跨站发送要先预检，本服务不放行
+UPLOAD_API = {
+    "/api/interviews/audio": ("audio/",),
+    "/api/positions/upload": ("application/vnd.", "application/octet-stream"),
+    "/api/positions/applicants": ("application/vnd.", "application/octet-stream"),
+}
 MAX_UPLOAD = 50 << 20
 
 api.load_all()
@@ -114,11 +119,11 @@ class Handler(BaseHTTPRequestHandler):
     def post_ok(self):
         """写接口额外要求：JSON 请求体（跨站的表单、简单请求发不出来），来源是本页面。
 
-        上传录音的接口收音频（audio/*）：同样不是浏览器“简单请求”的类型，跨站发送要先预检，本服务不放行。
+        上传接口（录音、职位表）收各自的二进制类型，见 UPLOAD_API。
         """
         ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
         path = urlparse(self.path).path
-        if ctype != "application/json" and not (path in UPLOAD_API and ctype.startswith("audio/")):
+        if ctype != "application/json" and not (path in UPLOAD_API and ctype.startswith(UPLOAD_API[path])):
             return False
         origin = (self.headers.get("Origin") or "").lower()
         if origin and origin != "http://" + (self.headers.get("Host") or "").strip().lower():
@@ -304,10 +309,10 @@ class Handler(BaseHTTPRequestHandler):
         return self.handle_api("POST", path, parse_qs(url.query), body)
 
     def handle_upload(self, path, query):
-        """二进制上传（面试录音）：请求体是音频本身，参数放在查询串里。"""
+        """二进制上传（面试录音、职位表）：请求体是文件本身，参数放在查询串里。"""
         n = int(self.headers.get("Content-Length") or 0)
         if n <= 0 or n > MAX_UPLOAD:
-            return self.send_json({"error": "录音为空或太大（上限 50 MB）"}, 400)
+            return self.send_json({"error": "文件为空或太大（上限 50 MB）"}, 400)
         data = self.rfile.read(n)
         ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
         return self.handle_api("POST", path, query, {"_bytes": data, "_ctype": ctype})
