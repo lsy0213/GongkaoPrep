@@ -25,7 +25,8 @@ REAL_BANK_PATH = LIB_DIR / "real_bank.json"
 REAL_ESSAYS_PATH = LIB_DIR / "real_essays.json"
 DECKS_PATH = LIB_DIR / "decks.json"
 
-DEFAULT_ROOT = r"E:\aaaaaaaa\gongkao"
+# 作者本机的资料位置；别的电脑上没有这个文件夹时不使用。也可以用环境变量 GONGKAO_LIBRARY_ROOT 指定
+DEFAULT_ROOT = os.environ.get("GONGKAO_LIBRARY_ROOT") or r"E:\aaaaaaaa\gongkao"
 DOC_EXT = {"pdf", "docx", "doc", "txt", "jpg", "jpeg", "png"}
 
 

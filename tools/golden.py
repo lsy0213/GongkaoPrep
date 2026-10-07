@@ -116,7 +116,7 @@ def pick(n):
             if by_cat[k] and len(picked) < n:
                 picked.append(by_cat[k].pop(rnd.randrange(len(by_cat[k]))))
     GOLDEN.mkdir(parents=True, exist_ok=True)
-    SAMPLES.write_text(json.dumps({"files": sorted(f["id"] for f in picked)}, indent=1), encoding="utf-8")
+    SAMPLES.write_text(json.dumps({"files": sorted(f["id"] for f in picked)}, indent=1), encoding="utf-8", newline="\n")
     print(f"挑了 {len(picked)} 份样本，写入 {SAMPLES}")
 
 
@@ -137,10 +137,12 @@ def update():
         sys.exit("没有样本：先运行 python tools/golden.py pick")
     isolate()
     res = build(files, root)
-    EXPECTED.write_text(json.dumps({k: v[0] for k, v in sorted(res.items())}, ensure_ascii=False, indent=1), encoding="utf-8")
+    EXPECTED.write_text(json.dumps({k: v[0] for k, v in sorted(res.items())}, ensure_ascii=False, indent=1), encoding="utf-8",
+                        newline="\n")
     LOCAL.mkdir(parents=True, exist_ok=True)
     for fid, (_d, rows) in res.items():
-        (LOCAL / f"{fid}.json").write_text(json.dumps(rows, ensure_ascii=False, indent=0), encoding="utf-8")
+        (LOCAL / f"{fid}.json").write_text(json.dumps(rows, ensure_ascii=False, indent=0), encoding="utf-8",
+                                              newline="\n")
     print(f"已登记 {len(res)} 份样本的基准结果")
 
 

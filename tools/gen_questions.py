@@ -13,7 +13,6 @@ import sys
 import os
 import random
 from fractions import Fraction
-from itertools import permutations
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "content", "questions_more")
