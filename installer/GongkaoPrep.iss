@@ -1,4 +1,4 @@
-; 上岸备考 安装包（Inno Setup 6）。build.bat 打包完成后自动调用：
+﻿; 上岸备考 安装包（Inno Setup 6）。build.bat 打包完成后自动调用：
 ;   ISCC /DAppVersion=0.3.0 installer\GongkaoPrep.iss
 ; 安装到当前用户目录（不需要管理员权限），学习数据在数据目录里，卸载不会删除。
 
@@ -26,7 +26,8 @@ WizardStyle=modern
 CloseApplications=yes
 
 [Languages]
-Name: "chinesesimp"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+; 简体中文语言文件来自 Inno Setup 官方仓库（jrsoftware/issrc，Files/Languages），安装包里不自带，放在本目录
+Name: "chinesesimp"; MessagesFile: "ChineseSimplified.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加任务："
