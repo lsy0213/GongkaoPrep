@@ -10,6 +10,21 @@ function ring(done, total) {
 
 const MODULE_ICON_ORDER = MODULES;
 
+// 白瓷星轨主题的首页顶部（珍藏手稿里 .hero-3d 是隐藏的）：悬浮的黏土字星轨、一行连续打卡天数和今日任务进度、透明的天使
+function hero3d(d, done, total) {
+  const pct = total ? done / total : 0;
+  const ph = d.phase;
+  return `<div class="hero-3d">
+    <div class="h3d-art" aria-hidden="true"></div>
+    <div class="h3d-day">
+      <span class="h3d-streak" title="${d.streak ? `已经连续打卡 ${d.streak} 天` : "今天打卡，开始新的连续天数"}">${d.streak ? `Day <b>${d.streak}</b>` : "New <b>Day</b>"}<span class="h3d-heart">♥</span></span>
+      <span class="h3d-goal" title="今日任务完成 ${done} / ${total}"><svg class="h3d-ring" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8"/><circle class="fg" cx="10" cy="10" r="8" pathLength="100" stroke-dasharray="${Math.round(pct * 100)} 100"/></svg><b>${done}</b> / ${total} 项任务</span>
+      <a class="h3d-phase" href="#/plan">${esc(ph.exam)} · ${esc(ph.name)} · 第 ${ph.day_index} / ${ph.days} 天</a>
+    </div>
+    <img class="h3d-figure" src="/img/skin/private/porcelain-angel.webp" alt="" aria-hidden="true" decoding="async" onerror="this.remove()">
+  </div>`;
+}
+
 // 今日复习：错题、闪卡（FSRS 到期的）、还能学的新卡，一张卡片列全
 function reviewCard(r) {
   if (!r) return "";
@@ -23,6 +38,63 @@ function reviewCard(r) {
     </div>
     <p class="small muted" style="margin:8px 0 0">先复习到期的，再学新的；间隔由 FSRS 记忆模型按你的打分安排。</p>
   </div>`;
+}
+
+// 概览：最近的一场考试倒计时放大，另外两个小的；下面一行今天的三个数字（待复习的错题、闪卡在「今日复习」里）
+function overview(d, exams, phase) {
+  const next = exams.find((m) => m.days_left >= 0) || exams[exams.length - 1];
+  const rest = exams.filter((m) => m !== next);
+  const md = (iso) => { const [, m, dd] = iso.split("-"); return `${+m} 月 ${+dd} 日`; };
+  const side = [
+    ...rest.map((m) => [m.days_left >= 0 ? `距${m.title}` : `${m.title}已过去`, Math.abs(m.days_left), `${m.date} · 预估，可在设置中修改`]),
+    [`${phase.name} 剩余`, phase.days_left, `${phase.start} 至 ${phase.end}`],
+  ];
+  const acc = d.questions_today ? ` · 正确率 ${Math.round((d.correct_today / d.questions_today) * 100)}%` : "";
+  return `<div class="card overview mb">
+    <div class="ov-top">
+      ${next ? `<div class="ov-main ${next.days_left < 0 ? "passed" : ""}" title="${esc(next.date)} · 预估，可在设置中修改">
+        <span class="ov-label">${next.days_left >= 0 ? "距" : ""}${esc(next.title)}${next.days_left < 0 ? "已过去" : ""}${next.days_left >= 0 && next.days_left <= 30 ? `<span class="stamp">冲刺</span>` : ""}</span>
+        <span class="ov-days"><b class="num">${Math.abs(next.days_left)}</b><small>天</small></span>
+        <span class="ov-date">${md(next.date)} · 预估</span></div>` : ""}
+      <div class="ov-side">${side.map(([k, v, t]) => `<div title="${esc(t)}"><span>${esc(k)}</span><b class="num">${v}</b><small>天</small></div>`).join("")}</div>
+    </div>
+    <div class="ov-stats">
+      <div><b class="num">${d.streak}</b><small>天</small><span>连续打卡</span></div>
+      <div><b class="num">${d.minutes_today}</b><small>分钟</small><span>今日学习</span></div>
+      <div><b class="num">${d.questions_today}</b><small>题</small><span>今日做题${acc}</span></div>
+    </div>
+  </div>`;
+}
+
+// 今日任务：圆形勾选 + 标题，右边一个小箭头去完成；加任务和打卡都收成一行
+export function tasksCard(d, doneCount, pct, hint = "背 20 个成语") {
+  const total = d.tasks.length;
+  return `<div class="card tasks-card">
+      <div class="card-head">
+        <h2>今日任务</h2>
+        <span class="tk-count"><svg class="h3d-ring" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8"/><circle class="fg" cx="10" cy="10" r="8" pathLength="100" stroke-dasharray="${pct} 100"/></svg><b class="num">${doneCount}</b> / ${total}</span>
+      </div>
+      <ul class="tasks" id="tasks">
+        ${d.tasks.map((t) => `
+          <li class="task ${t.done ? "done" : ""}">
+            <label class="tk-check"><input type="checkbox" data-id="${t.id}" ${t.done ? "checked" : ""} aria-label="完成：${esc(t.title)}"><span aria-hidden="true"></span></label>
+            <div class="t"><div class="t-title">${esc(t.title)}</div>
+              <div class="t-meta">${esc(t.module)}${t.minutes ? ` · 约 ${t.minutes} 分钟` : ""}${t.source === "user" ? " · 自己添加" : ""}</div></div>
+            ${t.link ? `<a class="tk-go" href="${esc(t.link)}" title="去完成" aria-label="去完成：${esc(t.title)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>` : `<button class="tk-del" data-del="${t.id}" title="删除" aria-label="删除：${esc(t.title)}">×</button>`}
+          </li>`).join("")}
+      </ul>
+      <form class="tk-add" id="add-task">
+        <span class="tk-plus" aria-hidden="true">+</span>
+        <input type="text" id="new-task" placeholder="添加自己的任务，例如：${esc(hint)}" aria-label="添加任务">
+        <button class="btn sm" type="submit">添加</button>
+      </form>
+      <div id="checkin" class="tk-checkin">
+        ${d.checked_in
+          ? `<span class="chip good">今日已打卡</span><span class="small muted">累计 ${d.checkin_total} 天 · 连续 ${d.streak} 天</span>`
+          : `<input type="text" id="checkin-note" placeholder="今天学了什么？（可不填）" aria-label="打卡备注">
+             <button class="btn primary" id="checkin-btn" title="${pct < 100 ? `还有 ${total - doneCount} 项任务未完成，也可以先打卡` : "今日任务全部完成"}">打卡</button>`}
+      </div>
+    </div>`;
 }
 
 export async function render(el) {
@@ -54,62 +126,13 @@ export async function render(el) {
       <span class="phase">${esc(phase.exam)} · ${esc(phase.name)} · 第 ${phase.day_index} / ${phase.days} 天</span>
     </div>
     <div class="hero-art" aria-hidden="true"></div>
+    ${hero3d(d, doneCount, d.tasks.length)}
   </div>
 
-  <div class="countdowns mb">
-    ${exams.map((m) => `
-      <div class="card countdown exam ${m.days_left < 0 ? "passed" : ""}">
-        ${m.days_left >= 0 && m.days_left <= 30 ? `<span class="stamp">冲刺</span>` : ""}
-        <div class="label">${m.days_left >= 0 ? "距" : ""}${esc(m.title)}${m.days_left < 0 ? "已过去" : ""}</div>
-        <div class="days num">${Math.abs(m.days_left)}<small>天</small></div>
-        <div class="date">${esc(m.date)} · 预估，可在设置中修改</div>
-      </div>`).join("")}
-    <div class="card countdown">
-      <div class="label">当前阶段剩余</div>
-      <div class="days num">${phase.days_left}<small>天</small></div>
-      <div class="date">${esc(phase.name)}：${esc(phase.start)} 至 ${esc(phase.end)}</div>
-    </div>
-  </div>
-
-  <div class="stats mb">
-    <div class="stat"><div class="v num">${d.streak}<small>天</small></div><div class="k">连续打卡</div></div>
-    <div class="stat"><div class="v num">${d.minutes_today}<small>分钟</small></div><div class="k">今日学习</div></div>
-    <div class="stat"><div class="v num">${d.questions_today}<small>题</small></div><div class="k">今日做题${d.questions_today ? ` · 正确率 ${Math.round((d.correct_today / d.questions_today) * 100)}%` : ""}</div></div>
-    <div class="stat ${d.due_wrong ? "alert" : ""}"><div class="v num">${d.due_wrong}<small>题</small></div><div class="k"><a href="#/wrong">待复习错题</a></div></div>
-    <div class="stat"><div class="v num">${d.due_cards}<small>张</small></div><div class="k"><a href="#/cards">待复习闪卡</a></div></div>
-  </div>
+  ${overview(d, exams, phase)}
 
   <div class="grid cols-main">
-    <div class="card">
-      <div class="card-head">
-        <h2>今日任务</h2>
-        <span class="small muted num">${doneCount} / ${d.tasks.length}</span>
-      </div>
-      <div class="progress mb"><i style="width:${pct}%"></i></div>
-      <ul class="tasks" id="tasks">
-        ${d.tasks.map((t) => `
-          <li class="task ${t.done ? "done" : ""}">
-            <input type="checkbox" data-id="${t.id}" ${t.done ? "checked" : ""} aria-label="完成：${esc(t.title)}">
-            <div class="t"><div class="t-title">${esc(t.title)}</div>
-              <div class="t-meta">${esc(t.module)}${t.minutes ? ` · 约 ${t.minutes} 分钟` : ""}${t.source === "user" ? " · 自己添加" : ""}</div></div>
-            ${t.link ? `<a class="btn sm" href="${esc(t.link)}">去完成</a>` : `<button class="btn sm ghost" data-del="${t.id}" title="删除">删除</button>`}
-          </li>`).join("")}
-      </ul>
-      <form class="row mt" id="add-task">
-        <input type="text" id="new-task" placeholder="添加一项自己的任务，例如：背 20 个成语" style="flex:1;min-width:180px">
-        <button class="btn" type="submit">添加</button>
-      </form>
-      <hr class="sep">
-      <div id="checkin">
-        ${d.checked_in
-          ? `<div class="row"><span class="chip good">今日已打卡</span><span class="small muted">累计打卡 ${d.checkin_total} 天，连续 ${d.streak} 天</span></div>`
-          : `<div class="stack">
-              <textarea id="checkin-note" rows="2" placeholder="今天学了什么、有什么收获或问题？（可不填）"></textarea>
-              <div class="row"><button class="btn primary" id="checkin-btn">打卡</button>
-                <span class="small muted">${pct < 100 ? `还有 ${d.tasks.length - doneCount} 项任务未完成，也可以先打卡` : "今日任务全部完成，打个卡吧"}</span></div>
-            </div>`}
-      </div>
-    </div>
+    ${tasksCard(d, doneCount, pct)}
 
     <div class="stack" style="gap:16px">
       ${reviewCard(d.review)}
@@ -134,18 +157,23 @@ export async function render(el) {
     </div>
   </div>`;
 
+  bindTasks(el, () => render(el));
+}
+
+// 今日任务卡片的勾选、删除、添加和打卡（软考首页也用）
+export function bindTasks(el, again) {
   el.querySelectorAll("#tasks input[type=checkbox]").forEach((cb) => {
     cb.onchange = async () => {
       try {
         await apiPost("/api/tasks/toggle", { id: +cb.dataset.id });
-        render(el);
+        again();
       } catch (e) { toast(e.message); }
     };
   });
   el.querySelectorAll("[data-del]").forEach((b) => {
     b.onclick = async () => {
       await apiPost("/api/tasks/delete", { id: +b.dataset.del });
-      render(el);
+      again();
     };
   });
   el.querySelector("#add-task").onsubmit = async (e) => {
@@ -153,12 +181,12 @@ export async function render(el) {
     const title = el.querySelector("#new-task").value.trim();
     if (!title) return;
     await apiPost("/api/tasks/add", { title });
-    render(el);
+    again();
   };
   const btn = el.querySelector("#checkin-btn");
   if (btn) btn.onclick = async () => {
     const r = await apiPost("/api/checkin", { note: el.querySelector("#checkin-note").value });
     toast(`打卡成功，已连续 ${r.streak} 天`);
-    render(el);
+    again();
   };
 }

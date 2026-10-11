@@ -68,18 +68,30 @@ export async function render(el) {
 
   el.innerHTML = `
     <div class="page-head"><div><div class="eyebrow">学习统计</div><h1>看看自己走了多远</h1></div></div>
-    <div class="stats mb">
-      <div class="stat"><div class="v num">${Math.round(totalMin / 60)}<small>小时</small></div><div class="k">累计学习</div></div>
-      <div class="stat"><div class="v num">${s.checkins.length}<small>天</small></div><div class="k">累计打卡</div></div>
-      <div class="stat"><div class="v num">${totalQ}<small>题</small></div><div class="k">累计做题</div></div>
-      <div class="stat"><div class="v num">${totalQ ? Math.round((totalOk / totalQ) * 100) : 0}<small>%</small></div><div class="k">总正确率</div></div>
-      <div class="stat"><div class="v num">${s.essays}<small>篇</small></div><div class="k">申论作答</div></div>
-      <div class="stat"><div class="v num">${s.interviews}<small>题</small></div><div class="k">面试练习</div></div>
-      <div class="stat"><div class="v num">${s.readings}<small>篇</small></div><div class="k">阅读文章</div></div>
-      <div class="stat"><div class="v num">${s.wrong_mastered}<small>/ ${s.wrong_open + s.wrong_mastered}</small></div><div class="k">错题已掌握</div></div>
+    <div class="card heat-card">
+      <div class="card-head"><h2>学习热力图</h2><span class="small muted">近半年 · 打卡 ${s.checkins.length} 天</span></div>
+      ${heatmap(s.heat, s.checkins)}
+      <div class="heat-legend"><span>少</span><i></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i><span>多</span><span class="spacer"></span><i class="ck"></i><span>打了卡</span></div>
     </div>
 
-    <div class="card">
+    <div class="card kpi mt">
+      <div class="kpi-big">
+        <div><span>累计学习</span><b class="num">${Math.round(totalMin / 60)}</b><small>小时</small></div>
+        <div><span>累计做题</span><b class="num">${totalQ}</b><small>题</small></div>
+        <div><span>总正确率</span><b class="num">${totalQ ? Math.round((totalOk / totalQ) * 100) : 0}</b><small>%</small></div>
+      </div>
+      <div class="ov-stats kpi-small">
+        <div><b class="num">${s.essays}</b><small>篇</small><span>申论作答</span></div>
+        <div><b class="num">${s.interviews}</b><small>题</small><span>面试练习</span></div>
+        <div><b class="num">${s.readings}</b><small>篇</small><span>阅读文章</span></div>
+      </div>
+      <div class="kpi-wrong">
+        <span>错题已掌握</span><b class="num">${s.wrong_mastered}</b><small>/ ${s.wrong_open + s.wrong_mastered}</small>
+        <span class="kpi-bar"><i style="width:${s.wrong_open + s.wrong_mastered ? Math.round((s.wrong_mastered / (s.wrong_open + s.wrong_mastered)) * 100) : 0}%"></i></span>
+      </div>
+    </div>
+
+    <div class="card mt">
       <div class="card-head"><h2>近 30 天</h2><span class="small muted"><span style="color:var(--brand)">—</span> 做题数　<span style="color:var(--warn)">- -</span> 学习分钟</span></div>
       ${lineChart(days.map((d) => ({ l: d.l, v: d.v, m: d.m })), { key: "v", key2: "m", labelEvery: 5 })}
     </div>
@@ -99,10 +111,6 @@ export async function render(el) {
         <div class="card-head"><h2>学习时间分布</h2><span class="small muted">共 ${fmtMinutes(totalMin)}</span></div>
         ${s.minutes_by_module.length ? s.minutes_by_module.map((m) => `<div class="hbar"><span>${esc(m.module)}</span><span class="track"><i style="width:${(m.minutes / maxMin) * 100}%"></i></span><span class="v">${m.minutes} 分</span></div>`).join("")
           : `<div class="empty small">做题、读教程、用专注计时器学习都会被记录</div>`}
-        <hr class="sep">
-        <h3 class="mb">近半年学习热力图</h3>
-        ${heatmap(s.heat, s.checkins)}
-        <div class="small muted">颜色越深学习时间越长，黄框表示当天打了卡。</div>
       </div>
     </div>
 
@@ -115,4 +123,7 @@ export async function render(el) {
           <td class="n">${x.total ? Math.round((x.correct / x.total) * 100) : 0}%</td><td class="n">${fmtClock(x.duration)}</td></tr>`).join("")}
       </tbody></table></div>` : `<div class="empty">还没有练习记录</div>`}
     </div>`;
+  // 热力图最新的在右边：手机上一屏放不下时直接滚到最近几周
+  const hm = el.querySelector(".heat");
+  if (hm) hm.scrollLeft = hm.scrollWidth;
 }

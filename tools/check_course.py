@@ -1,7 +1,8 @@
 """检查教程课文的格式：块是否闭合、测验答案是否有效、真题演练/计算器/速算参数是否正确等；
 以及知识导图（content/course/maps/*.txt）：缩进是否正确、@链接是否存在、每门课的每一课是否都出现在导图里。
 
-用法：python tools/check_course.py
+用法：python tools/check_course.py            （公考：content/course）
+      python tools/check_course.py --exam ruankao-arch   （其他考试：content/exams/<id>/course）
 """
 
 import json
@@ -17,6 +18,19 @@ DRILLS = {"mul", "div", "base", "inc", "share", "frac"}
 MODULES = {"政治理论", "常识判断", "言语理解与表达", "数量关系", "判断推理", "资料分析"}
 SUBS = {"全部", "", "图形推理", "定义判断", "类比推理", "逻辑判断", "逻辑填空", "片段阅读", "语句表达",
         "数学运算", "数字推理"}
+
+if "--exam" in sys.argv:
+    # 其他考试：课文在考试包里，真题演练的模块来自 exam.json，题型（考点）来自这门考试的考点规则
+    _EXAM = sys.argv[sys.argv.index("--exam") + 1]
+    _PACK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "content", "exams", _EXAM)
+    ROOT = os.path.join(_PACK, "course")
+    with open(os.path.join(_PACK, "exam.json"), encoding="utf-8") as _f:
+        MODULES = {m["name"] for m in json.load(_f).get("modules", [])}
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    if _EXAM.startswith("ruankao"):
+        from gongkao.ruankao import topics as _rk
+
+        SUBS = {"全部", ""} | {t["name"] for t in _rk.TOPICS.values()}
 
 
 def sections(body):

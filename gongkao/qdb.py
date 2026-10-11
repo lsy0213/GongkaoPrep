@@ -5,6 +5,9 @@
 - /api/bank/pick 按条件让服务器选出题目 id；
 - /api/bank/get 按 id 取题目详情（含材料、出处）。
 内置题和用户导入的题量很小，仍然放在内存里，和数据库里的题合在一起查。
+
+公考的题库在 library/questions.db；其他考试各有自己的 questions.db（exams/<id>/library/），
+用 path 参数 / Bank(db_path=…) 指定，表结构一样。
 """
 
 import json
@@ -34,17 +37,18 @@ CREATE INDEX IF NOT EXISTS q_kind ON questions(kind);
 _lock = threading.Lock()
 
 
-def connect():
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = open_db(DB_PATH)
+def connect(path=None):
+    path = path or DB_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = open_db(path)
     conn.executescript(SCHEMA)
     return conn
 
 
-def replace_kind(kind, sources, questions, materials):
+def replace_kind(kind, sources, questions, materials, path=None):
     """整体替换某一类（paper=真题卷，book=题册）的数据。"""
     with _lock:
-        conn = connect()
+        conn = connect(path)
         with conn:
             for t in ("sources", "questions", "materials"):
                 conn.execute(f"DELETE FROM {t} WHERE kind=?", (kind,))
@@ -75,10 +79,10 @@ def replace_kind(kind, sources, questions, materials):
         conn.close()
 
 
-def replace_series(kind, prefixes, sources, questions, materials):
+def replace_series(kind, prefixes, sources, questions, materials, path=None):
     """只替换某一套书（id 以 prefixes = (题源前缀, 题目前缀, 材料前缀) 开头）的数据，同类的其他书不动。"""
     with _lock:
-        conn = connect()
+        conn = connect(path)
         with conn:
             for t, p in zip(("sources", "questions", "materials"), prefixes):
                 conn.execute(f"DELETE FROM {t} WHERE kind=? AND id LIKE ?", (kind, p + "%"))
@@ -87,9 +91,9 @@ def replace_series(kind, prefixes, sources, questions, materials):
         conn.close()
     # 复用 replace_kind 的插入逻辑：先插到临时种类，再改成目标种类并接在已有题目后面
     tmp = kind + "-tmp"
-    replace_kind(tmp, sources, questions, materials)
+    replace_kind(tmp, sources, questions, materials, path)
     with _lock:
-        conn = connect()
+        conn = connect(path)
         with conn:
             conn.execute("UPDATE questions SET kind=?, seq=seq+? WHERE kind=?", (kind, seq0, tmp))
             conn.execute("UPDATE sources SET kind=?, sort=sort+? WHERE kind=?", (kind, sort0, tmp))
@@ -117,8 +121,10 @@ def _row_s(r):
 class Bank:
     """内置/导入题（内存）+ 数据库题的统一入口。索引只放选题需要的几列，近十万题也很轻。"""
 
-    def __init__(self, load_builtin):
+    def __init__(self, load_builtin, db_path=None, classify=None):
         self.load_builtin = load_builtin  # () -> {"questions": [...], "materials": [...], "custom_count": n}
+        self.db_path = db_path or DB_PATH
+        self.classify = classify  # 考点归类函数 (module, sub, stem, options) -> 考点 id；不给就用公考的 topics.classify
         self.key = None
         self.index = []      # [(id, module, sub, src, year, source, material, num)]
         self.mem = {}        # 内置/导入题 id -> 题
@@ -128,7 +134,7 @@ class Bank:
         self._topics = None
 
     def _key(self, extra):
-        return (stamp(DB_PATH), extra)
+        return (stamp(self.db_path), extra)
 
     def refresh(self, extra_key):
         key = self._key(extra_key)
@@ -147,8 +153,8 @@ class Bank:
                 index.append((q["id"], q["module"], q["sub"], q["src"], 0, q["src"], q.get("material"), 0))
         self.mem_mats = {m["id"]: m for m in builtin["materials"]}
         self.sources = []
-        if DB_PATH.exists():
-            conn = connect()
+        if self.db_path.exists():
+            conn = connect(self.db_path)
             for r in conn.execute("SELECT id, module, sub, src, year, source, material, num FROM questions "
                                   "WHERE answer IS NOT NULL ORDER BY kind DESC, seq"):
                 index.append(tuple(r))
@@ -164,11 +170,12 @@ class Bank:
             return self._topics
         from . import topics
 
+        classify = self.classify or topics.classify
         out = {}
         for q in self.mem.values():
-            out[q["id"]] = topics.classify(q.get("module"), q.get("sub"), q.get("stem"), q.get("options"))
-        if DB_PATH.exists():
-            conn = connect()
+            out[q["id"]] = classify(q.get("module"), q.get("sub"), q.get("stem"), q.get("options"))
+        if self.db_path.exists():
+            conn = connect(self.db_path)
             for r in conn.execute("SELECT id, module, sub, stem, options FROM questions WHERE answer IS NOT NULL"):
                 opts = r["options"]
                 if isinstance(opts, str):
@@ -176,7 +183,7 @@ class Bank:
                         opts = json.loads(opts)
                     except ValueError:
                         opts = None
-                out[r["id"]] = topics.classify(r["module"], r["sub"], r["stem"], opts)
+                out[r["id"]] = classify(r["module"], r["sub"], r["stem"], opts)
             conn.close()
         self._topics = out
         return out
@@ -196,9 +203,9 @@ class Bank:
                 continue
             if src == "builtin" and r[3] not in ("内置", "导入"):
                 continue
-            if src in ("国考", "四川", "千题册") and r[3] != src:
-                continue
-            if src == "real" and r[3] not in ("国考", "四川"):
+            if src not in ("all", "builtin", "real") and r[3] != src:
+                continue  # 国考、四川、千题册；软考的 真题、模拟
+            if src == "real" and r[3] not in ("国考", "四川", "真题"):
                 continue
             if years != "all" and r[4] and r[4] <= max_year - int(years):
                 continue
@@ -269,8 +276,8 @@ class Bank:
                     mats[q["material"]] = self.mem_mats[q["material"]]
             else:
                 db_ids.append(i)
-        if db_ids and DB_PATH.exists():
-            conn = connect()
+        if db_ids and self.db_path.exists():
+            conn = connect(self.db_path)
             for k in range(0, len(db_ids), 500):
                 chunk = db_ids[k:k + 500]
                 for r in conn.execute(f"SELECT * FROM questions WHERE id IN ({','.join('?' * len(chunk))})", chunk):

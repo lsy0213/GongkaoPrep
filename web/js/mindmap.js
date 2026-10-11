@@ -24,7 +24,7 @@ export function mountMindMap(host, roots, { title = "思维导图", open } = {})
   const all = [];
   (function walk(n) { all.push(n); n.children.forEach(walk); })(root);
   const openTo = (lv) => all.forEach((n) => (n.open = n.depth < lv));
-  openTo(open ?? (count <= 40 ? 99 : 2));
+  openTo(open ?? 1); // 默认全部收起：只露出第一层，点节点再展开
 
   // 控制条放在导图上方（阅读器里和“导图 / 文字提纲”同一行），不挡节点
   host.innerHTML = `<div class="mm">

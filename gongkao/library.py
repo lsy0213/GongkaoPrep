@@ -173,19 +173,29 @@ jobs = Jobs()
 
 # ---------------------------------------------------------------- 目录
 
-_catalog_cache = {"mtime": None, "data": None}
+_catalog_cache = {}  # 目录文件路径 → (修改时间, 内容)
+
+
+def catalog_path():
+    """当前考试的资料目录文件：公考是 library/catalog.json，其他考试是 exams/<id>/library/catalog.json
+    （原卷截图、原文件下载都按它找文件，只允许目录里登记过的）。"""
+    from . import exams
+
+    return CATALOG_PATH if exams.is_default() else exams.library_dir() / "catalog.json"
 
 
 def load_catalog():
+    path = catalog_path()
     try:
-        mt = CATALOG_PATH.stat().st_mtime
+        mt = path.stat().st_mtime
     except OSError:
         return {"root": "", "files": [], "scanned_at": ""}
-    if _catalog_cache["mtime"] != mt:
-        with open(CATALOG_PATH, encoding="utf-8") as f:
-            _catalog_cache["data"] = json.load(f)
-        _catalog_cache["mtime"] = mt
-    return _catalog_cache["data"]
+    c = _catalog_cache.get(str(path))
+    if not c or c[0] != mt:
+        with open(path, encoding="utf-8") as f:
+            c = (mt, json.load(f))
+        _catalog_cache[str(path)] = c
+    return c[1]
 
 
 def catalog_index():
@@ -248,18 +258,37 @@ def scan(root, job=None):
     return data
 
 
+def _root_and_rel(cat, rel):
+    """资料目录的根和文件的相对路径。
+
+    服务器模式：资料目录是从 Windows 电脑上传的（目录里记的是 E:\\... 和反斜杠），
+    用 GONGKAO_LIBRARY_ROOT 指向服务器上放原文件的地方（其他考试的放在它下面的 exams/<考试 id>/），
+    相对路径的分隔符换成本系统的。
+    """
+    from . import exams
+
+    env = os.environ.get("GONGKAO_LIBRARY_ROOT")
+    if env and not exams.is_default():
+        env = os.path.join(env, "exams", exams.current_id())
+    root = env or cat.get("root") or ""
+    if os.sep != "\\":
+        rel = (rel or "").replace("\\", os.sep)
+    return root, rel
+
+
 def resolve(fid):
     """文件 id → 绝对路径（只允许目录里登记过的文件）。"""
     cat = load_catalog()
     f = catalog_index().get(fid)
-    if not f or not cat.get("root"):
+    root, rel = _root_and_rel(cat, f["rel"] if f else "")
+    if not f or not root:
         return None, None
-    path = os.path.join(cat["root"], f["rel"])
+    path = os.path.join(root, rel)
     return (path, f) if os.path.isfile(path) else (None, f)
 
 
 def resolve_rel(rel):
-    root = load_catalog().get("root") or ""
+    root, rel = _root_and_rel(load_catalog(), rel)
     path = os.path.normpath(os.path.join(root, rel))
     if not root or not path.startswith(os.path.normpath(root)) or not os.path.isfile(path):
         return None

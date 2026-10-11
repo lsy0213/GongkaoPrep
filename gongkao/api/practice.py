@@ -5,7 +5,7 @@ import os
 import threading
 from datetime import date, timedelta
 
-from .. import fsrs, qdb
+from .. import exams, fsrs, qdb
 from ..paths import content_dir, load_content
 from ..scoring import estimate_score
 from ..userdb import DATA_DIR, now_str, rows, today
@@ -63,12 +63,46 @@ BANK = qdb.Bank(load_bank)
 _bank_lock = threading.Lock()
 
 
+_EXAM_BANKS = {}
+
+
+def _pack_question_files(ex):
+    folder = exams.content_path(ex) / "questions"
+    try:
+        return sorted(str(folder / n) for n in os.listdir(folder) if n.endswith(".json"))
+    except OSError:
+        return []
+
+
+def _pack_builtin(ex):
+    """其他考试的内置题：content/exams/<id>/questions/*.json（和公考 questions.json 同一个格式）。"""
+    out = {"questions": [], "materials": [], "custom_count": 0}
+    ids = set()
+    for path in _pack_question_files(ex):
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        out["questions"] += [q for q in data.get("questions", []) if q["id"] not in ids]
+        out["materials"] += data.get("materials", [])
+        ids |= {q["id"] for q in data.get("questions", [])}
+    return out
+
+
 def bank():
-    """题库索引（内置 + 导入 + 数据库），文件有变化时自动重新加载。"""
+    """题库索引（内置 + 导入 + 数据库），文件有变化时自动重新加载。每门考试一个题库。"""
+    ex = exams.current_id()
     with _bank_lock:
-        BANK.refresh((_mtime(content_dir() / "questions.json"), _mtime(CUSTOM_BANK),
-                      tuple(_mtime(p) for p in _more_files())))
-        return BANK
+        if exams.is_default(ex):
+            BANK.refresh((_mtime(content_dir() / "questions.json"), _mtime(CUSTOM_BANK),
+                          tuple(_mtime(p) for p in _more_files())))
+            return BANK
+        b = _EXAM_BANKS.get(ex)
+        if b is None:
+            from ..ruankao import topics as rk_topics
+
+            b = _EXAM_BANKS[ex] = qdb.Bank(lambda: _pack_builtin(ex), db_path=exams.library_dir(ex) / "questions.db",
+                                           classify=rk_topics.classify)
+        b.refresh(tuple(_mtime(p) for p in _pack_question_files(ex)))
+        return b
 
 
 def user_progress(conn):
@@ -330,7 +364,11 @@ def record_attempts(conn, payload):
     for it in items:
         ok_n, n = per.get(it.get("module"), (0, 0))
         per[it.get("module")] = (ok_n + (1 if it.get("correct") else 0), n + 1)
-    return {"session_id": session_id, "correct": correct_n, "total": len(items), "score": estimate_score(per)}
+    if exams.is_default():
+        score = estimate_score(per)
+    else:  # 软考综合知识每题 1 分，按 75 分折算
+        score = round(correct_n / len(items) * 75, 1) if items else 0.0
+    return {"session_id": session_id, "correct": correct_n, "total": len(items), "score": score}
 
 
 @route("POST", "/api/attempts")
@@ -480,5 +518,6 @@ def speed(ctx):
         "INSERT INTO speed_records(kind, total, correct, seconds, created_at) VALUES (?, ?, ?, ?, ?)",
         (b["kind"], int(b["total"]), int(b["correct"]), int(b["seconds"]), now_str()),
     )
-    log_minutes(ctx.conn, "资料分析", round(int(b["seconds"]) / 60), "速算")
+    log_minutes(ctx.conn, b.get("module") or ("资料分析" if exams.is_default() else "综合知识"), round(int(b["seconds"]) / 60),
+                b.get("source") or "速算")
     return {"ok": True}

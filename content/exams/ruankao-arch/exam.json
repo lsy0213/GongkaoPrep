@@ -1,0 +1,100 @@
+{
+  "id": "ruankao-arch",
+  "order": 2,
+  "family": "软考",
+  "level": "高级",
+  "name": "系统架构设计师",
+  "short": "软考 · 架构",
+  "emblem": "软",
+  "color": "#3E6B67",
+  "brand_sub": "软考 · 系统架构设计师",
+  "title": "上岸备考 · 软考架构",
+  "desc": "综合知识、案例分析、论文，三科一次过",
+  "planner": "ruankao.plan",
+
+  "subjects": [
+    {"id": "zh", "name": "综合知识", "full": 75, "pass": 45, "type": "choice", "desc": "75 道单选（含 5 道英语），每题 1 分"},
+    {"id": "al", "name": "案例分析", "full": 75, "pass": 45, "type": "case", "desc": "第 1 题必答，其余 4 题选 2，每题 25 分"},
+    {"id": "lw", "name": "论文", "full": 75, "pass": 45, "type": "essay", "desc": "从给定论题选 1 篇，摘要 + 正文约 2500 字"}
+  ],
+  "sessions": [
+    {"name": "上午", "subjects": ["zh", "al"], "minutes": 240, "note": "综合知识与案例分析连考，综合知识节省的时间可留给案例"},
+    {"name": "下午", "subjects": ["lw"], "minutes": 120, "note": "论文机考打字"}
+  ],
+
+  "modules": [
+    {"name": "计算机系统", "short": "计算机", "desc": "硬件、操作系统、嵌入式、网络、系统性能"},
+    {"name": "信息系统与数据库", "short": "数据库", "desc": "信息系统基础、数据库设计、分布式与缓存"},
+    {"name": "软件工程", "short": "软工", "desc": "开发模型、需求、UML、设计模式、测试与维护"},
+    {"name": "系统架构设计", "short": "架构", "desc": "架构风格、质量属性、评估、ABSD、构件、演化、可靠性"},
+    {"name": "架构实践与新技术", "short": "实践", "desc": "层次式、云原生、SOA、嵌入式、安全、大数据、未来技术"},
+    {"name": "信息安全", "short": "安全", "desc": "加密、签名、访问控制、安全模型、攻击防御"},
+    {"name": "项目管理与数学", "short": "管理", "desc": "进度、成本、运筹、决策"},
+    {"name": "知识产权与标准化", "short": "法规", "desc": "著作权、专利、商标、标准"},
+    {"name": "专业英语", "short": "英语", "desc": "71–75 题英语完形"}
+  ],
+
+  "ai": {
+    "system": "你是一位经验丰富的软考（计算机技术与软件专业技术资格考试）辅导老师，专攻高级「系统架构设计师」：熟悉综合知识、案例分析、论文三科的考法和评分，熟悉《系统架构设计师教程（第 2 版）》和新大纲。学员一边工作一边备考。讲解要准确、具体、可操作，用简体中文，适当使用小标题和列表；计算题写出完整步骤；不要编造标准编号、条款原文或考试数据，涉及考试安排、政策时提醒以中国计算机技术职业资格网和考区通知为准。",
+    "domain": "软考系统架构设计师",
+    "focus": "软考系统架构设计师（综合知识、案例分析、论文）",
+    "write_kind": "rkcase"
+  },
+
+  "nav": [
+    {"route": "", "label": "首页", "glyph": "⌂"},
+    {"sec": "learn", "label": "学习", "items": [
+      {"route": "plan", "label": "复习计划", "glyph": "☷"},
+      {"route": "learn", "label": "系统教程", "glyph": "✎"},
+      {"route": "library", "label": "资料库", "glyph": "▥"},
+      {"route": "video", "label": "视频课", "glyph": "▶"}
+    ]},
+    {"sec": "zh", "label": "综合知识", "items": [
+      {"route": "real", "label": "真题卷", "glyph": "卷"},
+      {"route": "practice", "label": "章节刷题", "glyph": "✐"},
+      {"route": "calc", "label": "计算题专练", "glyph": "∑"},
+      {"route": "mock", "label": "限时模考", "glyph": "⌛"}
+    ]},
+    {"sec": "alw", "label": "案例 · 论文", "items": [
+      {"route": "case", "label": "案例练习", "glyph": "❏"},
+      {"route": "paper", "label": "论文写作", "glyph": "✒"},
+      {"route": "exam", "label": "机考模拟", "glyph": "▣"}
+    ]},
+    {"sec": "review", "label": "复习", "items": [
+      {"route": "wrong", "label": "错题本", "glyph": "✗", "badge": "wrong"},
+      {"route": "cards", "label": "闪卡记忆", "glyph": "❖"},
+      {"route": "stats", "label": "学习统计", "glyph": "▤"}
+    ]},
+    {"route": "memo", "label": "笔记本", "glyph": "✍"},
+    {"route": "cert", "label": "考试与证书", "glyph": "✪"},
+    {"sep": true},
+    {"route": "ai", "label": "AI 助教", "glyph": "✦"},
+    {"route": "settings", "label": "设置", "glyph": "⚙"}
+  ],
+
+  "routes": {
+    "": "rk/home", "plan": "plan", "learn": "learn", "cert": "rk/cert", "library": "rk/library", "video": "rk/videos", "real": "rk/real", "practice": "practice",
+    "calc": "rk/calc", "mock": "rk/mock", "case": "rk/case", "paper": "rk/paper", "exam": "rk/exam", "wrong": "wrong", "cards": "cards", "stats": "stats", "memo": "memo",
+    "ai": "ai", "settings": "settings", "resume": "resume", "exams": "exams"
+  },
+
+  "bottom_nav": [
+    ["", "首页", "home", ["", "plan", "stats", "cert"]],
+    ["practice", "刷题", "practice", ["practice", "real", "mock", "calc", "wrong", "case", "paper", "exam"]],
+    ["cards", "闪卡", "cards", ["cards", "memo"]],
+    ["library", "资料", "library", ["library", "video", "learn"]]
+  ],
+
+  "timer": {
+    "modules": ["综合知识", "案例分析", "论文", "教程", "综合"],
+    "short": {"综合知识": "综合", "案例分析": "案例", "教程": "教程", "综合": "其他"},
+    "default": "综合知识"
+  },
+
+  "settings": {
+    "exam_date": "2027-05-22",
+    "start_date": "",
+    "daily_hours": "3",
+    "library_root": "E:\\aaaaaaaa\\软考\\软考高级系统架构设计师"
+  }
+}

@@ -20,6 +20,12 @@ repos:
         language: system
         files: ^content/course/
         pass_filenames: false
+      - id: course-ruankao
+        name: 软考教程格式检查
+        entry: python tools/check_course.py --exam ruankao-arch
+        language: system
+        files: ^content/exams/ruankao-arch/course/
+        pass_filenames: false
       - id: pytest
         name: 测试
         entry: python -m pytest -q

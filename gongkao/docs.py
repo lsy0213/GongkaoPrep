@@ -55,9 +55,17 @@ CREATE TABLE IF NOT EXISTS blocks (
 _lock = threading.Lock()
 
 
-def connect():
-    LIB.mkdir(parents=True, exist_ok=True)
-    conn = open_db(DB_PATH)
+def db_path():
+    """当前考试的资料库文档库：公考是 library/docs.db，其他考试是 exams/<id>/library/docs.db（整理、阅读器同一套表）。"""
+    from . import exams
+
+    return DB_PATH if exams.is_default() else exams.library_dir() / "docs.db"
+
+
+def connect(path=None):
+    path = path or db_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = open_db(path)
     conn.executescript(SCHEMA)
     try:
         conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5("
@@ -2201,7 +2209,7 @@ def find_duplicates(conn):
 # ---------------------------------------------------------------- 读取
 
 def doc_list():
-    if not DB_PATH.exists():
+    if not db_path().exists():
         return []
     conn = connect()
     rows = [dict(r) for r in conn.execute(
@@ -2244,7 +2252,7 @@ def doc_get(doc_id):
 def search(q, doc=None, limit=200):
     """全文搜索：三个字以上走全文索引；更短的逐条匹配。多个词用空格隔开，要求同一段里都有。"""
     terms = [t for t in (q or "").split() if t]
-    if not terms or not DB_PATH.exists():
+    if not terms or not db_path().exists():
         return []
     conn = connect()
     hits = []
@@ -2281,7 +2289,7 @@ def search(q, doc=None, limit=200):
 
 def outdated():
     """有按旧整理规则生成的文档（需要重新整理）。"""
-    if not DB_PATH.exists():
+    if not db_path().exists():
         return False
     conn = connect()
     n = conn.execute("SELECT COUNT(*) FROM docs WHERE version IS NULL OR version < ?", (VERSION,)).fetchone()[0]
@@ -2292,7 +2300,7 @@ def outdated():
 
 
 def status():
-    if not DB_PATH.exists():
+    if not db_path().exists():
         return {"docs": 0, "pending": 0}
     conn = connect()
     n = conn.execute("SELECT COUNT(*) FROM docs WHERE error IS NULL OR error=''").fetchone()[0]

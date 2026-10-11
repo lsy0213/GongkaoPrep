@@ -2,8 +2,13 @@
 
 表结构用 PRAGMA user_version 记版本，MIGRATIONS 按顺序执行没跑过的步骤；
 以后要加表、加列、加索引，就在末尾追加一步，老用户的库升级时自动补上。
+
+按考试分库（见 exams.py）：公考用这里的 app.db；其他考试各有一个 exams/<id>/app.db，表结构跑同一套
+MIGRATIONS，然后删掉共用表（exams.SHARED_TABLES），打开时把公考的 app.db 挂成 shared。
+所以迁移步骤里改共用表（加列）要能在没有这张表的库上跳过（_add_columns 已经这样做了）。
 """
 
+import json
 import os
 import sqlite3
 import threading
@@ -12,7 +17,7 @@ from contextlib import contextmanager
 from datetime import date, datetime
 from pathlib import Path
 
-from . import VERSION, library, secret
+from . import VERSION, exams, library, secret
 from .dbutil import open_db
 from .paths import data_dir
 
@@ -128,6 +133,8 @@ CREATE INDEX IF NOT EXISTS doc_marks_doc ON doc_marks(doc);
 def _add_columns(conn, table, cols):
     """给老表补列（已有就跳过）。cols: [(列名, 类型和默认值)]"""
     have = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+    if not have:
+        return  # 这个库里没有这张表（其他考试的库没有共用表）
     for name, decl in cols:
         if name not in have:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
@@ -210,14 +217,54 @@ def today_str():
     return today().isoformat()
 
 
-def connect():
-    return open_db(DB_PATH, timeout=15)
+_exam_ready = set()
+_exam_lock = threading.Lock()
+
+
+def _ensure_exam_db(exam_id):
+    """其他考试的学习记录库：第一次用时建好、每次启动补迁移，删掉共用表，加这门考试自己的设置表。"""
+    path = exams.app_db(exam_id)
+    with _exam_lock:
+        if exam_id in _exam_ready and path.exists():
+            return path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            _backup_file(path, exams.backup_dir(exam_id))
+        conn = open_db(path, timeout=15)
+        try:
+            migrate(conn)
+            for t in exams.SHARED_TABLES:
+                conn.execute(f"DROP TABLE IF EXISTS {t}")
+            conn.execute("CREATE TABLE IF NOT EXISTS exam_settings (key TEXT PRIMARY KEY, value TEXT)")
+            for k, v in exams.exam_settings(exam_id).items():
+                conn.execute("INSERT OR IGNORE INTO exam_settings(key, value) VALUES (?, ?)", (k, str(v)))
+            conn.execute("UPDATE exam_settings SET value=? WHERE key='start_date' AND value=''", (today_str(),))
+            conn.commit()
+        finally:
+            conn.close()
+        _exam_ready.add(exam_id)
+    return path
+
+
+def connect(exam=None):
+    """打开当前考试（或指定考试）的学习记录库。公考就是 app.db；其他考试是自己的库 + 挂上 app.db（shared）。"""
+    ex = exam or exams.current_id()
+    if exams.is_default(ex):
+        return open_db(DB_PATH, timeout=15)
+    conn = open_db(_ensure_exam_db(ex), timeout=15)
+    conn.execute("ATTACH DATABASE ? AS shared", (str(DB_PATH),))
+    return conn
+
+
+def shared_name(conn):
+    """共用表所在的库名：公考的连接是 main，其他考试的连接是 shared（prefs 两边都有，要写明库名）。"""
+    return "shared" if any(r[1] == "shared" for r in conn.execute("PRAGMA database_list")) else "main"
 
 
 @contextmanager
-def db():
+def db(exam=None):
     """打开连接，结束时提交（出错则回滚）并关闭。"""
-    conn = connect()
+    conn = connect(exam)
     try:
         with conn:
             yield conn
@@ -251,6 +298,9 @@ def init_db():
 
 def get_settings(conn, include_secret=False):
     s = {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM settings")}
+    if shared_name(conn) == "shared":
+        # 其他考试：考试日期、资料文件夹、每天学多久这些用这门考试自己的
+        s.update({r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM exam_settings")})
     s["ai_api_key"] = secret.unprotect(s.get("ai_api_key") or "")
     s["app_version"] = VERSION
     if not include_secret:
@@ -261,16 +311,47 @@ def get_settings(conn, include_secret=False):
     return s
 
 
+def get_prefs(conn):
+    """界面偏好：这门考试自己的 + 所有考试共用的（外观、阅读器、笔记本，见 exams.GLOBAL_PREFS）。"""
+    out = {r["key"]: json.loads(r["value"]) for r in conn.execute("SELECT key, value FROM main.prefs")}
+    if shared_name(conn) == "shared":
+        for k in exams.GLOBAL_PREFS:
+            out.pop(k, None)
+        out.update({r["key"]: json.loads(r["value"]) for r in conn.execute("SELECT key, value FROM shared.prefs")
+                    if r["key"] in exams.GLOBAL_PREFS})
+    return out
+
+
+def save_prefs(conn, values):
+    """值为 None 表示删除。共用的偏好写进 app.db，其余写进这门考试的库。"""
+    db_name = shared_name(conn)
+    for k, v in values.items():
+        target = db_name if k in exams.GLOBAL_PREFS else "main"
+        if v is None:
+            conn.execute(f"DELETE FROM {target}.prefs WHERE key=?", (k,))
+        else:
+            conn.execute(f"INSERT OR REPLACE INTO {target}.prefs(key, value) VALUES (?, ?)",
+                         (k, json.dumps(v, ensure_ascii=False)))
+
+
+def save_setting(conn, key, value):
+    """存一项设置：这门考试自己的设置项（exams.exam_settings）存进它的库，其余存进共用的 settings。"""
+    if shared_name(conn) == "shared" and key in exams.exam_settings():
+        conn.execute("INSERT OR REPLACE INTO exam_settings(key, value) VALUES (?, ?)", (key, value))
+    else:
+        conn.execute("INSERT OR REPLACE INTO settings(key, value) VALUES (?, ?)", (key, value))
+
+
 # ---------------------------------------------------------------- 备份与恢复
 
-def backup_to(path):
-    """用 SQLite 在线备份接口复制一份 app.db（包括还在 -wal 里没合并的写入），写到 path。"""
+def backup_to(path, src_path=None):
+    """用 SQLite 在线备份接口复制一份学习记录库（包括还在 -wal 里没合并的写入），写到 path。"""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
     if tmp.exists():
         tmp.unlink()
-    src = sqlite3.connect(str(DB_PATH), timeout=15)
+    src = sqlite3.connect(str(src_path or DB_PATH), timeout=15)
     dst = sqlite3.connect(str(tmp))
     try:
         with write_lock:
@@ -282,8 +363,8 @@ def backup_to(path):
     return path
 
 
-def _prune(prefix, keep):
-    files = sorted(BACKUP_DIR.glob(prefix + "*.db"), key=lambda p: p.name, reverse=True)
+def _prune(prefix, keep, folder=None):
+    files = sorted((folder or BACKUP_DIR).glob(prefix + "*.db"), key=lambda p: p.name, reverse=True)
     for p in files[keep:]:
         try:
             p.unlink()
@@ -291,33 +372,52 @@ def _prune(prefix, keep):
             pass
 
 
-def auto_backup():
-    """每天第一次启动时备份一次，保留最近 DAILY_KEEP 天。返回备份文件（今天已备份过返回 None）。"""
-    if not DB_PATH.exists():
+def _backup_file(db_path, folder):
+    """某个学习记录库每天第一次打开时备份一次，保留最近 DAILY_KEEP 天。"""
+    if not db_path.exists():
         return None
-    target = BACKUP_DIR / f"daily-{today_str()}.db"
+    target = folder / f"daily-{today_str()}.db"
     if target.exists():
         return None
     try:
-        backup_to(target)
+        backup_to(target, db_path)
     except (OSError, sqlite3.Error):
         return None
-    _prune("daily-", DAILY_KEEP)
+    _prune("daily-", DAILY_KEEP, folder)
     return target
+
+
+def auto_backup():
+    """每天第一次启动时备份一次公考的 app.db（含共用的设置、笔记本），保留最近 DAILY_KEEP 天。
+    返回备份文件（今天已备份过返回 None）。其他考试的库在当天第一次打开时备份（_ensure_exam_db）。"""
+    return _backup_file(DB_PATH, BACKUP_DIR)
+
+
+def _current_db():
+    """当前考试的学习记录库文件和备份文件夹。"""
+    if exams.is_default():
+        return DB_PATH, BACKUP_DIR
+    return _ensure_exam_db(exams.current_id()), exams.backup_dir()
 
 
 def snapshot(reason):
-    """导入、恢复这类会覆盖数据的操作之前，先留一份快照。"""
+    """导入、恢复这类会覆盖数据的操作之前，先给当前考试的学习记录留一份快照。"""
+    db_path, folder = _current_db()
     safe = "".join(ch for ch in reason if ch.isalnum())[:12] or "snapshot"
-    target = BACKUP_DIR / f"snap-{datetime.now():%Y%m%d-%H%M%S}-{safe}.db"
-    backup_to(target)
-    _prune("snap-", SNAPSHOT_KEEP)
+    target = folder / f"snap-{datetime.now():%Y%m%d-%H%M%S}-{safe}.db"
+    backup_to(target, db_path)
+    _prune("snap-", SNAPSHOT_KEEP, folder)
     return target
+
+
+def backups_dir():
+    return _current_db()[1]
 
 
 def list_backups():
     out = []
-    for p in sorted(BACKUP_DIR.glob("*.db"), key=lambda p: p.stat().st_mtime, reverse=True):
+    folder = backups_dir()
+    for p in sorted(folder.glob("*.db"), key=lambda p: p.stat().st_mtime, reverse=True):
         kind = "每日自动" if p.name.startswith("daily-") else "操作前快照"
         out.append({"name": p.name, "kind": kind, "size": p.stat().st_size,
                     "time": time.strftime("%Y-%m-%d %H:%M", time.localtime(p.stat().st_mtime))})
@@ -325,8 +425,9 @@ def list_backups():
 
 
 def restore_backup(name):
-    """用一份备份覆盖当前学习记录（先给当前数据留快照）。"""
-    src_path = BACKUP_DIR / name
+    """用一份备份覆盖当前考试的学习记录（先给当前数据留快照）。"""
+    db_path, folder = _current_db()
+    src_path = folder / name
     if "/" in name or "\\" in name or not src_path.is_file():
         raise ValueError("找不到这份备份")
     snapshot("恢复前")
@@ -336,18 +437,22 @@ def restore_backup(name):
         if ok != "ok":
             raise ValueError("这份备份已损坏，不能用来恢复")
         with write_lock:
-            dst = sqlite3.connect(str(DB_PATH), timeout=15)
+            dst = sqlite3.connect(str(db_path), timeout=15)
             try:
                 src.backup(dst)
             finally:
                 dst.close()
     finally:
         src.close()
-    conn = connect()
-    try:
-        migrate(conn)  # 旧备份的表结构补到最新
-    finally:
-        conn.close()
+    if exams.is_default():
+        conn = connect()
+        try:
+            migrate(conn)  # 旧备份的表结构补到最新
+        finally:
+            conn.close()
+    else:
+        _exam_ready.discard(exams.current_id())
+        _ensure_exam_db(exams.current_id())
     return {"ok": True}
 
 
@@ -369,10 +474,13 @@ USER_TABLES = [
 
 
 def export_all(conn):
-    out = {"app": "gongkao-prep", "version": VERSION, "schema": schema_version(),
+    """导出当前考试的学习记录（加上共用的设置、笔记本、打卡）。"""
+    out = {"app": "gongkao-prep", "version": VERSION, "schema": schema_version(), "exam": exams.current_id(),
            "exported_at": now_str(), "tables": {}}
     for t in USER_TABLES:
         out["tables"][t] = rows(conn, f"SELECT * FROM {t}")
+    if shared_name(conn) == "shared":
+        out["tables"]["exam_settings"] = rows(conn, "SELECT * FROM exam_settings")
     for r in out["tables"]["settings"]:
         if r["key"] == "ai_api_key":
             r["value"] = ""  # 备份文件里不带密钥
@@ -382,6 +490,10 @@ def export_all(conn):
 def import_all(conn, data):
     if not isinstance(data, dict) or data.get("app") != "gongkao-prep" or not isinstance(data.get("tables"), dict):
         raise ValueError("这不是上岸备考导出的备份文件")
+    src_exam = data.get("exam") or exams.DEFAULT  # 老版本导出的都是公考
+    if src_exam != exams.current_id():
+        raise ValueError(f"这份备份是「{exams.get(src_exam).get('name', src_exam)}」的学习记录，"
+                         f"请先切换到这门考试再导入")
     tables = data["tables"]
     conn.commit()
     snap = snapshot("导入前")
@@ -398,6 +510,11 @@ def import_all(conn, data):
                     (r.get("key"), r.get("value")),
                 )
             continue
+        if t == "prefs" and shared_name(conn) == "shared":
+            # 共用的偏好按键分流（见 save_prefs）
+            conn.execute("DELETE FROM main.prefs")
+            save_prefs(conn, {r["key"]: json.loads(r["value"]) for r in tables[t] if r.get("key")})
+            continue
         conn.execute(f"DELETE FROM {t}")
         for r in tables[t]:
             keys = [k for k in r if k in cols]
@@ -407,6 +524,9 @@ def import_all(conn, data):
                 f"INSERT INTO {t}({','.join(keys)}) VALUES ({','.join('?' * len(keys))})",
                 [r[k] for k in keys],
             )
+    if shared_name(conn) == "shared":
+        for r in tables.get("exam_settings") or []:
+            conn.execute("INSERT OR REPLACE INTO exam_settings(key, value) VALUES (?, ?)", (r.get("key"), r.get("value")))
     return {"ok": True, "snapshot": snap.name}
 
 

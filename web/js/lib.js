@@ -1,14 +1,22 @@
 // 公共工具：接口请求、内容缓存、HTML 转义、Markdown、提示、图表、AI 流式输出
 
-export const MODULES = ["政治理论", "常识判断", "言语理解与表达", "数量关系", "判断推理", "资料分析"];
-export const MODULE_SHORT = {
+// 题目的模块（公考：行测六模块；软考：综合知识的知识模块）。来自考试清单 exam.json 的 modules，initExam 时换成当前考试的；
+// 用 let 导出，引用它的页面拿到的是换过以后的值
+export let MODULES = ["政治理论", "常识判断", "言语理解与表达", "数量关系", "判断推理", "资料分析"];
+export let MODULE_SHORT = {
   "政治理论": "政治", "常识判断": "常识", "言语理解与表达": "言语", "数量关系": "数量", "判断推理": "判断", "资料分析": "资料",
 };
 export const LETTERS = "ABCD";
 
+// 服务器模式下登录过期：回登录页
+function checkLogin(r, data) {
+  if (r.status === 401 && data.login) location.href = "/login";
+}
+
 export async function apiGet(path) {
   const r = await fetch(path, { cache: "no-store" });
   const data = await r.json().catch(() => ({ error: "服务器没有返回有效数据" }));
+  checkLogin(r, data);
   if (!r.ok || data.error) throw new Error(data.error || `请求失败（${r.status}）`);
   return data;
 }
@@ -20,12 +28,15 @@ export async function apiPost(path, body = {}) {
     body: JSON.stringify(body),
   });
   const data = await r.json().catch(() => ({ error: "服务器没有返回有效数据" }));
+  checkLogin(r, data);
   if (!r.ok || data.error) throw new Error(data.error || `请求失败（${r.status}）`);
   return data;
 }
 
 const cache = new Map();
 export function content(name) {
+  // 教程课文、导图是每门考试自己的：公考在 content/course，其他考试在 content/exams/<id>/course
+  if (name.startsWith("course/") && EXAM.id && EXAM.id !== "gongkao") name = `exams/${EXAM.id}/${name}`;
   if (!cache.has(name)) {
     const url = "/content/" + name;
     const p = fetch(url).then((r) => {
@@ -140,6 +151,43 @@ let flushTimer = null;
 export async function initStore() {
   try { Object.assign(prefs, await apiGet("/api/prefs")); } catch { /* 读不到就用默认值 */ }
 }
+
+// ---------------------------------------------------------------- 考试（公考、软考……）
+// 当前考试写在 Cookie 里，之后每个请求（包括图片）都带着它，服务端按它读写那门考试的数据；
+// 电脑窗口和手机可以各看各的考试。清单（菜单、路由、计时科目……）来自 content/exams/<id>/exam.json
+export const EXAM = { id: "", list: [], cur: null };
+export async function initExam() {
+  let r;
+  try { r = await apiGet("/api/exams"); } catch { r = { current: "gongkao", cookie: "gk_exam", exams: [] }; }
+  EXAM.id = r.current;
+  EXAM.list = r.exams || [];
+  EXAM.cookie = r.cookie || "gk_exam";
+  EXAM.cur = EXAM.list.find((e) => e.id === r.current) || { id: r.current, nav: [], routes: {}, settings: {} };
+  if (EXAM.cur.modules?.length) {
+    MODULES = EXAM.cur.modules.map((m) => m.name);
+    MODULE_SHORT = Object.fromEntries(EXAM.cur.modules.map((m) => [m.name, m.short || m.name]));
+  }
+  setExamCookie(EXAM.id);
+  return EXAM;
+}
+function setExamCookie(id) {
+  document.cookie = `${EXAM.cookie || "gk_exam"}=${encodeURIComponent(id)}; path=/; max-age=31536000; samesite=strict`;
+}
+// 切换考试：记下来（下次打开默认进这门），换 Cookie，整页重新载入（菜单、偏好、数据全换成那门考试的）
+export async function switchExam(id) {
+  if (id === EXAM.id) return;
+  clearTimeout(flushTimer);
+  if (Object.keys(pending).length) {
+    // 没存的偏好先存进原来那门考试（等它存完再换 Cookie）
+    const body = { ...pending };
+    for (const k of Object.keys(pending)) delete pending[k];
+    await apiPost("/api/prefs", body).catch(() => {});
+  }
+  setExamCookie(id);
+  try { await apiPost("/api/exams/current", { id }); } catch { /* 记不住默认也没关系，Cookie 已经换了 */ }
+  location.hash = "#/";
+  location.reload();
+}
 function flush(unloading = false) {
   const body = { ...pending };
   for (const k of Object.keys(pending)) delete pending[k];
@@ -168,6 +216,29 @@ export const store = {
   },
 };
 window.addEventListener("beforeunload", () => { if (Object.keys(pending).length) { clearTimeout(flushTimer); flush(true); } });
+
+// 界面风格：[id, 名字, 说明, 预览色]。默认白瓷星轨（skin-porcelain.css）；珍藏手稿是 style.css 本身
+export const SKINS = [
+  ["porcelain", "白瓷星轨", "白瓷黏土字 · 金色星轨 · 透明天使 · 极简宋体", ["#EFEEEC", "#FFFFFF", "#B59A62"]],
+  ["cabinet", "珍藏手稿", "象牙纸 · 油画撕边 · 洛可可卷草 · 酒红批注", ["#ECE6DB", "#6E7C6B", "#8A2232"]],
+];
+// 套用界面风格和深浅色（跟随系统 / 浅色 / 深色），再抄一份到 localStorage，下次打开时 boot.js 在样式加载前就能套上
+export function applyLook() {
+  const d = document.documentElement;
+  const skin = store.get("skin", "porcelain");
+  const theme = store.get("theme", "system");
+  d.setAttribute("data-skin", SKINS.some(([id]) => id === skin) ? skin : "porcelain");
+  // 侧栏左上角的图标：白瓷星轨用白瓷台阶加金色星轨的那张，珍藏手稿用原来的酒红书本
+  const logo = document.querySelector(".brand-logo");
+  if (logo) logo.src = d.getAttribute("data-skin") === "porcelain" ? "/img/logo-porcelain.png" : "/logo.svg";
+  if (theme === "light" || theme === "dark") d.setAttribute("data-theme", theme);
+  else d.removeAttribute("data-theme");
+  try { localStorage.setItem("gk-skin", d.getAttribute("data-skin")); localStorage.setItem("gk-theme", theme); } catch { /* 读写不了也没关系 */ }
+  // 手机浏览器顶部状态栏的颜色跟着底色走
+  const bg = getComputedStyle(d).getPropertyValue("--bg").trim();
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", bg || "#EFEEEB");
+}
+window.matchMedia?.("(prefers-color-scheme: dark)").addEventListener?.("change", () => applyLook());
 
 // 导出文件：桌面窗口里弹“另存为”，浏览器里走下载
 export async function saveFile(filename, text) {

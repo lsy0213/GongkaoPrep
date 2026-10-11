@@ -1,0 +1,457 @@
+/* 白瓷星轨：和 EngNest 的「白瓷星轨」主题同一套——浅灰白的瓷面、细金线、深灰小圆点、毛玻璃侧栏、亮面玻璃胶囊按钮、整套宋体。
+   首页顶部是悬浮的白瓷黏土字和金色星轨（css/skin/porcelain-solys.webp），右边站着透明的天使（img/skin/private/，不在公开仓库里，没有就不显示）。
+   只在 <html data-skin="porcelain"> 时生效；珍藏手稿的样式写在 style.css 里，这里逐项盖掉它的油画、撕纸、卷草。 */
+
+:root[data-skin="porcelain"] {
+  --bg: #EFEEEB; --surface: #FAFAF8; --surface-2: #F2F1EE; --surface-3: #E6E4DF;
+  --ink: #292A27; --ink-2: #62635D; --ink-3: #8A8983; --line: #E3E1DB;
+  --brand: #262626; --brand-ink: #FAFAF8; --brand-soft: #E7E6E3; --brand-deep: #111111;
+  --good: #4F7A5C; --good-soft: #E3ECE5; --bad: #A8473D; --bad-soft: #F4E3E0;
+  --warn: #9A7A3C; --warn-soft: #F2EBDC; --info: #4F6475; --info-soft: #E3E8EC;
+  --shadow: inset 0 1px 0 rgba(255, 255, 255, .9), 0 18px 36px -24px rgba(40, 38, 34, .32), 0 2px 6px -3px rgba(40, 38, 34, .1);
+  --accent: #8C6D35; --side: #F6F5F2; --orn: #B9A06C; --rule: #E0DDD6;
+  --heat-1: #DEDDD9; --heat-2: #B9B8B3; --heat-3: #7B7A75; --heat-4: #3E3E3C;
+  --radius: 18px; --radius-sm: 12px;
+  --pc-gold: #A68B52; --pc-gold-2: #DCC797;
+  --pc-latin: "Iowan Old Style", "Palatino Linotype", "Palatino", "Book Antiqua", Georgia;
+  --pc-cjk: "Noto Serif SC", "Source Han Serif SC", "Noto Serif SC Web", "Songti SC", "STSong", serif;
+  --pc-serif: "Didot", "Bodoni 72", "Bodoni MT", var(--pc-cjk); /* 大数字、大标题：高反差的 Didot */
+  --font: var(--pc-latin), var(--pc-cjk); /* 整个主题都用宋体，不用黑体 */
+  --display: var(--pc-serif);
+  --ui: var(--font);
+  --num: var(--pc-latin), var(--pc-cjk);
+  /* 按钮：亮面玻璃（亮面渐变 + 上沿高光 + 很细的边），不用纯黑 */
+  --pc-btn: linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(255, 255, 255, .62));
+  --pc-btn-hover: linear-gradient(180deg, #fff, rgba(255, 255, 255, .8));
+  --pc-btn-shadow: inset 0 1px 1px #fff, inset 0 -1px 2px rgba(120, 100, 60, .14), 0 0 0 .5px rgba(40, 38, 34, .16), 0 6px 14px -6px rgba(40, 38, 34, .3);
+  --pc-glass: rgba(255, 255, 255, .58);
+  --pc-glass-edge: inset 0 1px 0 rgba(255, 255, 255, .7);
+  --pc-card-edge: color-mix(in srgb, var(--line) 70%, #fff);
+  --pc-emboss-sm: 0 1px 0 #fff, 0 2px 3px rgba(0, 0, 0, .14);
+  --pc-dot: .55;
+  --pc-day-shadow: 0 1px 0 rgba(255, 255, 255, .9);
+}
+/* 深色：夜瓷 */
+:root[data-skin="porcelain"][data-theme="dark"] {
+  --bg: #141414; --surface: #1D1D1D; --surface-2: #242424; --surface-3: #2E2E2E;
+  --ink: #EEEDEA; --ink-2: #BDBCB8; --ink-3: #8F8E8A; --line: #33322F;
+  --brand: #EDEBE6; --brand-ink: #161616; --brand-soft: #2A2A29; --brand-deep: #FFFFFF;
+  --good: #8CBF9A; --good-soft: #213328; --bad: #E58B7F; --bad-soft: #43251F; --warn: #D9B670; --warn-soft: #3D3320; --info: #8DB2C2; --info-soft: #1F3039;
+  --shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 18px 36px -22px rgba(0, 0, 0, .7);
+  --accent: #D2B675; --side: #191919; --orn: #8F7D58; --rule: #34332F;
+  --heat-1: #2C2C2B; --heat-2: #55544F; --heat-3: #A3A29C; --heat-4: #E9E8E4;
+  --pc-glass: rgba(34, 34, 34, .6);
+  --pc-glass-edge: inset 0 1px 0 rgba(255, 255, 255, .06);
+  --pc-card-edge: rgba(255, 255, 255, .07);
+  --pc-emboss-sm: 0 -1px 0 rgba(255, 255, 255, .25), 0 2px 4px rgba(0, 0, 0, .6);
+  --pc-dot: .25;
+  --pc-btn: linear-gradient(180deg, rgba(255, 255, 255, .2), rgba(255, 255, 255, .07));
+  --pc-btn-hover: linear-gradient(180deg, rgba(255, 255, 255, .26), rgba(255, 255, 255, .1));
+  --pc-btn-shadow: inset 0 1px 0 rgba(255, 255, 255, .3), inset 0 -1px 1px rgba(0, 0, 0, .2), 0 0 0 .5px rgba(255, 255, 255, .12), 0 6px 14px -6px rgba(0, 0, 0, .6);
+  --pc-day-shadow: 0 -1px 0 rgba(0, 0, 0, .6);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-skin="porcelain"]:not([data-theme="light"]) {
+    --bg: #141414; --surface: #1D1D1D; --surface-2: #242424; --surface-3: #2E2E2E;
+    --ink: #EEEDEA; --ink-2: #BDBCB8; --ink-3: #8F8E8A; --line: #33322F;
+    --brand: #EDEBE6; --brand-ink: #161616; --brand-soft: #2A2A29; --brand-deep: #FFFFFF;
+    --good: #8CBF9A; --good-soft: #213328; --bad: #E58B7F; --bad-soft: #43251F; --warn: #D9B670; --warn-soft: #3D3320; --info: #8DB2C2; --info-soft: #1F3039;
+    --shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 18px 36px -22px rgba(0, 0, 0, .7);
+    --accent: #D2B675; --side: #191919; --orn: #8F7D58; --rule: #34332F;
+    --heat-1: #2C2C2B; --heat-2: #55544F; --heat-3: #A3A29C; --heat-4: #E9E8E4;
+    --pc-glass: rgba(34, 34, 34, .6);
+    --pc-glass-edge: inset 0 1px 0 rgba(255, 255, 255, .06);
+    --pc-card-edge: rgba(255, 255, 255, .07);
+    --pc-emboss-sm: 0 -1px 0 rgba(255, 255, 255, .25), 0 2px 4px rgba(0, 0, 0, .6);
+    --pc-dot: .25;
+    --pc-btn: linear-gradient(180deg, rgba(255, 255, 255, .2), rgba(255, 255, 255, .07));
+    --pc-btn-hover: linear-gradient(180deg, rgba(255, 255, 255, .26), rgba(255, 255, 255, .1));
+    --pc-btn-shadow: inset 0 1px 0 rgba(255, 255, 255, .3), inset 0 -1px 1px rgba(0, 0, 0, .2), 0 0 0 .5px rgba(255, 255, 255, .12), 0 6px 14px -6px rgba(0, 0, 0, .6);
+    --pc-day-shadow: 0 -1px 0 rgba(0, 0, 0, .6);
+    color-scheme: dark;
+  }
+}
+
+/* ---------- 底色：中间亮四周灰的瓷面 + 稀疏小圆点 ---------- */
+[data-skin="porcelain"] body { background: radial-gradient(120% 90% at 60% 0%, color-mix(in srgb, var(--surface) 90%, #fff), var(--bg) 70%) fixed, var(--bg); }
+[data-skin="porcelain"] ::selection { background: rgba(181, 154, 98, .28); }
+[data-skin="porcelain"] :focus-visible { outline-color: var(--pc-gold); }
+[data-skin="porcelain"] .skin-deco::before { top: 0; right: 0; bottom: 0; left: 0; width: auto; height: auto; background: url("skin/porcelain-dots.svg") 0 0 / 640px 640px; opacity: var(--pc-dot); }
+[data-skin="porcelain"] .skin-deco::after { content: none; }
+
+/* ---------- 侧栏：透明的瓷面，选中项是浅底 + 左边一道短金线 ---------- */
+[data-skin="porcelain"] .sidebar {
+  padding-left: 14px; background: color-mix(in srgb, var(--surface) 55%, transparent);
+  backdrop-filter: blur(16px) saturate(140%); -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border-right: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+[data-skin="porcelain"] .sidebar::before, [data-skin="porcelain"] .sidebar::after { content: none; }
+[data-skin="porcelain"] .brand { border-bottom-color: var(--line); }
+[data-skin="porcelain"] .brand-logo { width: 42px; height: 42px; border-radius: 10px; box-shadow: 0 6px 14px -8px rgba(40, 38, 34, .45); }
+[data-skin="porcelain"] .brand-name { font: 600 19px/1.2 var(--pc-serif); letter-spacing: .22em; color: var(--ink); text-shadow: var(--pc-emboss-sm); }
+[data-skin="porcelain"] .brand-sub { letter-spacing: .12em; }
+[data-skin="porcelain"] .nav-item { border-radius: 12px; padding: 5px 10px 5px 14px; font-size: 15px; letter-spacing: .02em; }
+[data-skin="porcelain"] .nav-item .ico { filter: none; opacity: .8; }
+[data-skin="porcelain"] .nav-item:hover { background: color-mix(in srgb, var(--surface) 70%, transparent); }
+[data-skin="porcelain"] .nav-item.active { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(40, 38, 34, .06); }
+[data-skin="porcelain"] .nav-item.active::before { left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 3px; background: var(--pc-gold); -webkit-mask: none; mask: none; }
+[data-skin="porcelain"] .nav-item.active .ico { color: var(--ink); }
+/* 分组标题：小字、字距拉开，像 EngNest 的「学习 / 探索 / 我的」；组内不再缩进加竖线 */
+[data-skin="porcelain"] .nav-group { margin: 12px 0 2px; padding: 2px 10px 2px 14px; font: 500 12px/1.6 var(--ui); letter-spacing: .14em; color: var(--ink-3); }
+[data-skin="porcelain"] .nav-sec-body > div > div { margin: 0 0 4px; border-left: 0; }
+[data-skin="porcelain"] .nav-sec-body .nav-item { padding-left: 14px; }
+[data-skin="porcelain"] .nav-sep, [data-skin="porcelain"] .sidebar-foot { border-color: var(--line); }
+[data-skin="porcelain"] .nav-sep { background: var(--line); }
+[data-skin="porcelain"] .badge { border-radius: 999px; border-color: transparent; background: color-mix(in srgb, var(--pc-gold) 22%, var(--surface)); color: var(--ink); }
+[data-skin="porcelain"] .nav-sec.folded:has(.badge:not([hidden])) .nav-group .label::after { background: var(--pc-gold); }
+/* 考试切换：亮面玻璃胶囊 + 毛玻璃弹层，考试徽章是带高光的小瓷块 */
+[data-skin="porcelain"] .exs-btn { border-radius: 16px; border-color: transparent; background: var(--pc-btn); box-shadow: var(--pc-btn-shadow);
+  backdrop-filter: blur(12px) saturate(160%); -webkit-backdrop-filter: blur(12px) saturate(160%); }
+[data-skin="porcelain"] .exs-btn:hover { background: var(--pc-btn-hover); }
+[data-skin="porcelain"] .exs-k { color: var(--pc-gold); }
+[data-skin="porcelain"] .exs-n { font-family: var(--pc-serif); letter-spacing: .04em; }
+[data-skin="porcelain"] .exs-em { border-radius: 10px; font-family: var(--pc-serif);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--exs) 78%, #fff), var(--exs) 55%, color-mix(in srgb, var(--exs) 80%, #000));
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .55), inset 0 -1px 2px rgba(0, 0, 0, .18), 0 4px 10px -5px rgba(40, 38, 34, .55); }
+[data-skin="porcelain"] .exs-em.plain { background: var(--pc-btn); color: var(--ink-2); box-shadow: var(--pc-btn-shadow); }
+[data-skin="porcelain"] .exs-menu { border-radius: 20px; border-color: color-mix(in srgb, var(--line) 80%, transparent);
+  background: color-mix(in srgb, var(--surface) 82%, transparent); backdrop-filter: blur(22px) saturate(160%); -webkit-backdrop-filter: blur(22px) saturate(160%); }
+[data-skin="porcelain"] .exs-h { color: var(--pc-gold); }
+[data-skin="porcelain"] .exs-it { border-radius: 14px; }
+[data-skin="porcelain"] .exs-it:hover { background: color-mix(in srgb, var(--surface) 92%, transparent); }
+[data-skin="porcelain"] .exs-it.on { background: var(--pc-btn); box-shadow: var(--pc-btn-shadow); }
+[data-skin="porcelain"] .exs-sep { background: var(--line); }
+[data-skin="porcelain"] .timer .tm { font-family: var(--pc-serif); }
+[data-skin="porcelain"] .timer.running .tm { color: var(--accent); }
+[data-skin="porcelain"] .timer select { border-radius: 8px; }
+[data-skin="porcelain"] body.nav-collapsed .nav-group { height: 1px; padding: 0; margin: 6px 4px; background: var(--line); }
+[data-skin="porcelain"] body.nav-collapsed .nav-sec-body .nav-item { padding-left: 0; }
+@media (max-width: 720px) {
+  [data-skin="porcelain"] .skin-deco { display: block; }
+  [data-skin="porcelain"] .nav-group { height: 1px; padding: 0; margin: 6px 4px; background: var(--line); }
+  [data-skin="porcelain"] .nav-sec-body .nav-item { padding-left: 0; }
+}
+@media (max-width: 560px) {
+  [data-skin="porcelain"] .sidebar { padding: 70px 12px 16px; background: color-mix(in srgb, var(--surface) 82%, transparent); }
+  [data-skin="porcelain"] .nav-group { height: auto; padding: 8px 10px 2px 14px; margin: 6px 0 0; background: none; }
+  [data-skin="porcelain"] .nav-sec-body .nav-item { padding-left: 14px; }
+  /* 左上角的菜单按钮：圆形的亮面玻璃 */
+  [data-skin="porcelain"] .mobile-menu {
+    top: calc(10px + env(safe-area-inset-top)); width: 42px; height: 42px; border-radius: 50%; border: 0; font-size: 18px; color: var(--ink-2);
+    background: var(--pc-btn); box-shadow: var(--pc-btn-shadow); backdrop-filter: blur(12px) saturate(160%); -webkit-backdrop-filter: blur(12px) saturate(160%);
+  }
+  [data-skin="porcelain"] body.nav-open .nav-scrim { background: rgba(30, 30, 28, .28); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
+}
+
+/* ---------- 标题：浮雕字 + 一道由金到透明的细线 ---------- */
+[data-skin="porcelain"] h1, [data-skin="porcelain"] h2, [data-skin="porcelain"] h3, [data-skin="porcelain"] h4 { font-family: var(--pc-serif); }
+[data-skin="porcelain"] .page-head h1 { font-weight: 700; letter-spacing: .03em; text-shadow: var(--pc-emboss-sm); }
+[data-skin="porcelain"] .page-head::before { right: 0; bottom: 0; background: linear-gradient(90deg, var(--pc-gold), var(--pc-gold-2) 30%, transparent 85%); opacity: .7; }
+[data-skin="porcelain"] .page-head::after { content: none; }
+[data-skin="porcelain"] .page-head > .row, [data-skin="porcelain"] .page-head > .btn, [data-skin="porcelain"] .page-head > .chip { margin-right: 0; }
+[data-skin="porcelain"] .eyebrow { letter-spacing: .28em; text-transform: uppercase; }
+
+/* ---------- 卡片：圆角瓷面、细边、浅投影；标题下一根细线（不要尾端的圆点） ---------- */
+[data-skin="porcelain"] .card { border-radius: var(--radius); background: color-mix(in srgb, var(--surface) 88%, transparent); border: 1px solid var(--pc-card-edge); box-shadow: 0 1px 2px rgba(40, 38, 34, .04), 0 14px 32px -22px rgba(40, 38, 34, .28); }
+[data-skin="porcelain"] .card-head { background: linear-gradient(var(--line), var(--line)) left bottom / 100% 1px no-repeat; }
+[data-skin="porcelain"] .card-head h2, [data-skin="porcelain"] .card-head h3 { font-weight: 700; letter-spacing: .02em; }
+[data-skin="porcelain"] :is(.deck, .course-card, .doc-card, .pick button, .opt, .q-opt, .lesson) { border-radius: var(--radius-sm); }
+[data-skin="porcelain"] :is(.deck, .course-card):hover { box-shadow: var(--shadow), inset 3px 0 var(--pc-gold); }
+[data-skin="porcelain"] .stage-no { border-color: var(--pc-gold); color: var(--accent); }
+[data-skin="porcelain"] code { border-radius: 6px; }
+[data-skin="porcelain"] hr.sep { border-top-color: var(--line); }
+
+/* ---------- 按钮、标签、分段、输入框：亮面玻璃胶囊 ---------- */
+[data-skin="porcelain"] .btn { border-radius: 999px; padding: 6px 17px; }
+[data-skin="porcelain"] .btn.sm { padding: 3px 12px; }
+[data-skin="porcelain"] .btn.lg { padding: 9px 24px; }
+[data-skin="porcelain"] .btn:not(.primary):not(.ghost) { background: var(--pc-glass); border-color: color-mix(in srgb, var(--line) 80%, transparent); box-shadow: var(--pc-glass-edge); }
+[data-skin="porcelain"] .btn:not(.primary):not(.ghost):hover { background: color-mix(in srgb, var(--surface) 92%, transparent); border-color: var(--line); }
+[data-skin="porcelain"] .btn.primary { background: var(--pc-btn); border-color: transparent; color: var(--ink); font-weight: 600; box-shadow: var(--pc-btn-shadow); }
+[data-skin="porcelain"] .btn.primary:hover { background: var(--pc-btn-hover); border-color: transparent; }
+[data-skin="porcelain"] .btn.danger { color: var(--bad); }
+[data-skin="porcelain"] .chip { border-radius: 999px; padding: 0 10px; }
+[data-skin="porcelain"] .seg { border-radius: 999px; padding: 3px; gap: 2px; border-color: transparent; background: var(--pc-glass); box-shadow: var(--pc-glass-edge), 0 1px 3px rgba(0, 0, 0, .05); }
+[data-skin="porcelain"] .seg button { border-radius: 999px; padding: 4px 14px; }
+[data-skin="porcelain"] .seg button + button { border-left: 0; }
+[data-skin="porcelain"] .seg button:hover { background: color-mix(in srgb, var(--surface) 60%, transparent); }
+[data-skin="porcelain"] .seg button.active { background: var(--pc-btn); color: var(--ink); font-weight: 600; box-shadow: var(--pc-btn-shadow); }
+[data-skin="porcelain"] .tabs { gap: 2px; padding: 4px; border: 0; border-radius: 999px; width: fit-content; max-width: 100%; background: var(--pc-glass); box-shadow: var(--pc-glass-edge), 0 1px 3px rgba(0, 0, 0, .05); }
+[data-skin="porcelain"] .tabs button { padding: 4px 14px; margin: 0; border-radius: 999px; }
+[data-skin="porcelain"] .tabs button.active { background: var(--pc-btn); font-weight: 600; box-shadow: var(--pc-btn-shadow); }
+[data-skin="porcelain"] :is(input[type=text], input[type=date], input[type=number], input[type=password], input[type=search], select, textarea) { border-radius: 12px; background-color: color-mix(in srgb, var(--surface) 85%, transparent); }
+[data-skin="porcelain"] :is(input, select, textarea):focus { border-color: var(--pc-gold); box-shadow: 0 0 0 3px rgba(181, 154, 98, .18); }
+[data-skin="porcelain"] .progress { border-radius: 999px; }
+[data-skin="porcelain"] .progress > i { border-radius: 999px; background: linear-gradient(90deg, var(--pc-gold-2), var(--pc-gold)); }
+[data-skin="porcelain"] .toast { border-radius: 999px; padding: 9px 22px; background: color-mix(in srgb, var(--ink) 88%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+[data-skin="porcelain"] .opt.chosen, [data-skin="porcelain"] .q-opt.sel { border-color: var(--pc-gold); background: color-mix(in srgb, var(--pc-gold) 10%, var(--surface)); }
+[data-skin="porcelain"] .opt.chosen .L { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+[data-skin="porcelain"] .q-opt.sel { box-shadow: inset 3px 0 0 var(--pc-gold); }
+[data-skin="porcelain"] .pick button.active { border-color: var(--pc-gold); color: var(--ink); box-shadow: inset 3px 0 var(--pc-gold); }
+[data-skin="porcelain"] .ai-box { border-left-color: var(--pc-gold); border-radius: 0 12px 12px 0; }
+[data-skin="porcelain"] .msg { border-radius: 16px; }
+[data-skin="porcelain"] .msg.user { background: var(--pc-btn); color: var(--ink); box-shadow: var(--pc-btn-shadow); }
+[data-skin="porcelain"] .msg.assistant { border-left-color: var(--pc-gold); }
+
+/* ---------- 首页 ---------- */
+/* 倒计时、统计：大号 Didot 数字，酒红印章换成细金线小章 */
+[data-skin="porcelain"] .countdown .days { font: 400 58px/1 var(--pc-serif); }
+[data-skin="porcelain"] .countdown.exam .days { color: var(--ink); }
+[data-skin="porcelain"] .countdown.passed .days { color: var(--ink-3); }
+[data-skin="porcelain"] .stamp { border: 1px solid var(--pc-gold); border-radius: 999px; padding: 0 10px; transform: none; color: var(--accent); box-shadow: none; font-family: var(--ui); letter-spacing: .24em; }
+[data-skin="porcelain"] .stat { border-top-color: var(--line); }
+[data-skin="porcelain"] .stat .v { font: 600 30px/1.2 var(--pc-serif); }
+[data-skin="porcelain"] .stat.alert .v { color: var(--accent); }
+/* 今日任务：一张清单，悬停浅底，不要酒红竖条 */
+[data-skin="porcelain"] .task { border-bottom-color: var(--line); border-radius: 12px; padding: 12px 10px; }
+[data-skin="porcelain"] .task:hover { background: var(--surface-2); box-shadow: none; }
+[data-skin="porcelain"] .task input { accent-color: var(--pc-gold); }
+[data-skin="porcelain"] .task .t-title { font: 600 16px/1.45 var(--ui); letter-spacing: .02em; }
+[data-skin="porcelain"] .task.done .t-title { text-decoration-color: var(--ink-3); }
+[data-skin="porcelain"] .daily-quote { font: italic 400 20px/1.6 var(--pc-serif); }
+[data-skin="porcelain"] :is(.daily-quote, .quote .qt)::before, [data-skin="porcelain"] :is(.daily-quote, .quote .qt)::after { color: var(--pc-gold); }
+[data-skin="porcelain"] .verdict.no { color: var(--bad); }
+
+/* 首页顶部：不要油画横幅和问候语，只有悬浮的黏土字星轨、一行小小的连续天数和今日任务进度、透明的天使 */
+[data-skin="porcelain"] .hero { display: block; padding: 0; margin: -10px 0 22px; min-height: 0; color: inherit; background: none; box-shadow: none; overflow: visible; }
+[data-skin="porcelain"] .hero::after { content: none; }
+[data-skin="porcelain"] .hero > .ring, [data-skin="porcelain"] .hero > .hero-copy, [data-skin="porcelain"] .hero > .hero-art { display: none; }
+[data-skin="porcelain"] .hero-3d { position: relative; display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, .85fr); grid-template-areas: "art fig" "day fig"; align-items: center; column-gap: 12px; max-width: 1040px; margin: 0 auto; }
+[data-skin="porcelain"] .h3d-art { grid-area: art; aspect-ratio: 1200 / 613; background: url("skin/porcelain-solys.webp") center / contain no-repeat; animation: pc-float 9s ease-in-out infinite; will-change: transform; }
+@keyframes pc-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+/* 小小的一行：DAY 4 ♥ ｜ ◔ 2 / 5 项任务 ｜ 国考 · 基础阶段 第 3 / 30 天 */
+[data-skin="porcelain"] .h3d-day {
+  grid-area: day; justify-self: start; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: -2px 0 0 8%; position: relative; z-index: 2;
+  font: 800 15px/1 "SF Pro Rounded", ui-rounded, "Arial Rounded MT Bold", "Nunito", system-ui, sans-serif;
+  text-transform: uppercase; letter-spacing: .14em; color: var(--ink-3); text-shadow: var(--pc-day-shadow);
+}
+[data-skin="porcelain"] .h3d-day a { color: inherit; text-decoration: none; }
+[data-skin="porcelain"] .h3d-day b { font: 400 26px/1 var(--pc-serif); letter-spacing: 0; color: var(--ink-2); }
+[data-skin="porcelain"] .h3d-heart { font-size: 11px; margin-left: 4px; }
+[data-skin="porcelain"] .h3d-streak { display: inline-flex; align-items: baseline; gap: 6px; }
+[data-skin="porcelain"] :is(.h3d-goal, .h3d-phase) { display: inline-flex; align-items: center; gap: 6px; padding-left: 14px; border-left: 1px solid var(--line); font: 500 12.5px/1 var(--font); letter-spacing: .06em; text-transform: none; }
+[data-skin="porcelain"] .h3d-goal b { font-size: 17px; }
+[data-skin="porcelain"] .h3d-ring { width: 16px; height: 16px; transform: rotate(-90deg); fill: none; stroke-width: 2.4; }
+[data-skin="porcelain"] .h3d-ring circle { stroke: color-mix(in srgb, var(--ink-3) 28%, transparent); }
+[data-skin="porcelain"] .h3d-ring .fg { stroke: var(--pc-gold); stroke-linecap: round; }
+[data-skin="porcelain"] .h3d-figure {
+  grid-area: fig; justify-self: center; display: block; height: clamp(240px, 26vw, 340px); width: auto; pointer-events: none; z-index: 1;
+  filter: drop-shadow(0 0 10px rgba(255, 255, 255, .9)) drop-shadow(0 14px 18px rgba(60, 70, 90, .22)); animation: pc-float 7s ease-in-out -2s infinite; will-change: transform;
+}
+
+/* 手机：星轨字铺满一行，天使站在右下角、和星轨叠在一起 */
+@media (max-width: 900px) {
+  [data-skin="porcelain"] .hero-3d { grid-template-columns: 1fr; grid-template-areas: "art" "day"; padding-bottom: 8px; }
+  [data-skin="porcelain"] .h3d-day { margin: -6px 0 0 12px; max-width: 64%; }
+  [data-skin="porcelain"] .h3d-phase { display: none; }
+  [data-skin="porcelain"] .h3d-art { justify-self: start; margin: 4px -8px 0 -16px; width: 96%; }
+  [data-skin="porcelain"] .h3d-figure { position: absolute; right: -4px; bottom: -14px; height: 168px; z-index: 3; }
+  [data-skin="porcelain"] .skin-deco::before { background-size: 420px 420px; }
+}
+@media (max-width: 560px) {
+  [data-skin="porcelain"] .hero { margin-top: -18px; }
+  [data-skin="porcelain"] .h3d-goal { border-left: 0; padding-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) { [data-skin="porcelain"] :is(.h3d-art, .h3d-figure) { animation: none; } }
+
+/* 今日复习：圆角浅底，有到期的加一道金线，不用黄底 */
+[data-skin="porcelain"] .review-row { border-radius: 12px; border-color: var(--line); background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
+[data-skin="porcelain"] .review-row b { font-family: var(--pc-serif); font-weight: 400; }
+[data-skin="porcelain"] .review-row.due { border-color: color-mix(in srgb, var(--pc-gold) 45%, var(--line)); background: color-mix(in srgb, var(--pc-gold) 9%, var(--surface)); box-shadow: inset 3px 0 var(--pc-gold); }
+[data-skin="porcelain"] .review-row:hover { border-color: var(--pc-gold); text-decoration: none; }
+
+/* 其他「选中」状态：同样用亮面玻璃，不铺纯黑 */
+[data-skin="porcelain"] :is(.lib-side button.active, .rd-tree-tools .seg button.on, .lmap-tabs a.on, .calendar .c.on, .timeline .seg-p.now) {
+  background: var(--pc-btn); border-color: transparent; color: var(--ink); box-shadow: var(--pc-btn-shadow);
+}
+[data-skin="porcelain"] .timeline .seg-p.now b { color: var(--ink); }
+[data-skin="porcelain"] .lib-side button { border-radius: 10px; }
+[data-skin="porcelain"] .bars .b i { border-radius: 4px 4px 0 0; }
+[data-skin="porcelain"] .bars .b.today i { background: linear-gradient(180deg, var(--pc-gold-2), var(--pc-gold)); }
+
+/* 手机：三个倒计时排成一行小卡片，不用一张张占满屏幕 */
+@media (max-width: 560px) {
+  [data-skin="porcelain"] .countdowns { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  [data-skin="porcelain"] .countdown { padding: 12px 10px 10px; border-radius: 14px; }
+  [data-skin="porcelain"] .countdown .label { font-size: 12px; letter-spacing: .02em; line-height: 1.4; }
+  [data-skin="porcelain"] .countdown .days { font-size: 34px; margin: 6px 0 2px; }
+  [data-skin="porcelain"] .countdown .days small { font-size: 12px; margin-left: 2px; }
+  [data-skin="porcelain"] .countdown .date { font-size: 10.5px; line-height: 1.4; }
+  [data-skin="porcelain"] .stamp { top: 6px; right: 6px; font-size: 10px; padding: 0 6px; letter-spacing: .12em; }
+}
+
+/* 侧栏菜单：细线图标（navx.js 加的 .ico-ln），不用原来的字形 */
+[data-skin="porcelain"] .nav-item .ico { display: none !important; }
+[data-skin="porcelain"] .nav-item .ico-ln { display: inline-grid; place-items: center; opacity: .78; }
+[data-skin="porcelain"] .nav-item.active .ico-ln { opacity: 1; }
+[data-skin="porcelain"] .nav-item.active .ico-ln .ln-ico { stroke-width: 1.9; }
+[data-skin="porcelain"] .nav-item:hover .ico-ln { opacity: 1; }
+/* 手机：底栏的字也用宋体；首页顶部不再给 ☰ 留位置 */
+@media (max-width: 560px) {
+  [data-skin="porcelain"] .hero { margin-top: -6px; }
+  [data-skin="porcelain"] .bn-item { font-family: var(--ui); }
+  [data-skin="porcelain"] .bn-item.active { color: var(--ink); }
+  [data-skin="porcelain"] .sidebar { padding-top: calc(28px + env(safe-area-inset-top)); }
+}
+
+/* 首页概览、今日任务：金色进度、亮面玻璃小按钮 */
+[data-skin="porcelain"] .ov-days b { color: var(--ink); font-weight: 400; text-shadow: var(--pc-emboss-sm); }
+[data-skin="porcelain"] .ov-side b, [data-skin="porcelain"] .ov-stats b { font-weight: 400; }
+[data-skin="porcelain"] .tk-count svg .fg { stroke: var(--pc-gold); }
+[data-skin="porcelain"] .tk-check input:checked + span { background: var(--pc-gold); border-color: var(--pc-gold); }
+[data-skin="porcelain"] .tk-check span::after { border-color: #fff; }
+[data-skin="porcelain"] .tk-go { border: 0; background: var(--pc-btn); box-shadow: var(--pc-btn-shadow); color: var(--ink); }
+[data-skin="porcelain"] .tasks-card .task { border-radius: 0; padding: 13px 4px; }
+[data-skin="porcelain"] .tasks-card .task:hover { background: none; }
+[data-skin="porcelain"] .tk-add input[type=text] { background: transparent; border-radius: 0; }
+[data-skin="porcelain"] .course-prog svg .fg { stroke: var(--pc-gold); }
+[data-skin="porcelain"] .course-prog b { font-weight: 400; }
+
+/* 闪卡：圆角瓷面，不要里面那圈细线；打分按钮是一排玻璃块 */
+[data-skin="porcelain"] .flash-face { border-radius: 24px; outline: 0; border: 1px solid var(--pc-card-edge); background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: 0 1px 2px rgba(40, 38, 34, .04), 0 22px 44px -26px rgba(40, 38, 34, .35); }
+[data-skin="porcelain"] .fc-pile { border-radius: 24px; }
+[data-skin="porcelain"] .fc-pile::before, [data-skin="porcelain"] .fc-pile::after { border-color: var(--pc-card-edge); }
+[data-skin="porcelain"] .flash-card .front { font-family: var(--pc-serif); font-weight: 600; text-shadow: var(--pc-emboss-sm); }
+[data-skin="porcelain"] .flash-card .back { border-top-color: var(--line); }
+[data-skin="porcelain"] .flash-actions.rate .btn { border-radius: 18px; }
+[data-skin="porcelain"] .flash-actions.rate .btn.primary b { color: var(--good); }
+[data-skin="porcelain"] .flash-stamp { border-radius: 999px; }
+
+/* 专项刷题：玻璃胶囊、圆角瓷块、金色进度 */
+[data-skin="porcelain"] .pills button { background: var(--pc-glass); border-color: color-mix(in srgb, var(--line) 80%, transparent); box-shadow: var(--pc-glass-edge); }
+[data-skin="porcelain"] .pills button.active { background: var(--pc-btn); border-color: transparent; color: var(--ink); font-weight: 600; box-shadow: var(--pc-btn-shadow); }
+[data-skin="porcelain"] :is(.mod-tile, .mode-pick button) { border-radius: 16px; border-color: var(--pc-card-edge); background: color-mix(in srgb, var(--surface) 88%, transparent);
+  box-shadow: 0 1px 2px rgba(40, 38, 34, .04), 0 10px 24px -20px rgba(40, 38, 34, .3); }
+[data-skin="porcelain"] .mod-tile i { left: 14px; right: 14px; bottom: 9px; height: 2px; border-radius: 2px; overflow: hidden; }
+[data-skin="porcelain"] .mod-tile i::after { background: linear-gradient(90deg, var(--pc-gold-2), var(--pc-gold)); }
+[data-skin="porcelain"] .mod-tile { padding-bottom: 20px; }
+[data-skin="porcelain"] :is(.mod-tile, .mode-pick button).active { border-color: color-mix(in srgb, var(--pc-gold) 70%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pc-gold) 55%, transparent), 0 12px 26px -18px rgba(120, 95, 50, .4); }
+[data-skin="porcelain"] .start-bar { border-radius: 999px; border-color: var(--pc-card-edge); background: color-mix(in srgb, var(--surface) 72%, transparent); }
+[data-skin="porcelain"] .sb-info b { font-weight: 400; }
+[data-skin="porcelain"] .pr-years { border-radius: 999px; }
+
+/* 勾选框：不用系统的蓝色，细线圆角方框，勾上是金底白勾 */
+[data-skin="porcelain"] input[type=checkbox]:not(.tk-check input):not(.switch input) {
+  appearance: none; -webkit-appearance: none; flex: none; width: 18px; height: 18px; margin: 0; vertical-align: -3px; cursor: pointer;
+  border: 1.5px solid color-mix(in srgb, var(--ink-3) 75%, transparent); border-radius: 6px; background: var(--surface) center / 12px 12px no-repeat;
+  transition: background-color .15s, border-color .15s;
+}
+[data-skin="porcelain"] input[type=checkbox]:not(.tk-check input):not(.switch input):checked {
+  border-color: var(--pc-gold); background-color: var(--pc-gold);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.2 5 8.6l4.5-5'/%3E%3C/svg%3E");
+}
+[data-skin="porcelain"] input[type=checkbox]:disabled { opacity: .45; cursor: default; }
+[data-skin="porcelain"] input[type=radio] { accent-color: var(--pc-gold); }
+[data-skin="porcelain"] .switch input:checked + span { background: var(--pc-gold); }
+/* 分段按钮放不下时左右滑，不换行（换行会挤成一个大椭圆） */
+[data-skin="porcelain"] .seg { flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+[data-skin="porcelain"] .seg::-webkit-scrollbar { display: none; }
+[data-skin="porcelain"] .seg button { flex: none; white-space: nowrap; }
+/* 开始卡片、复习计划、面试 */
+[data-skin="porcelain"] .start-bar { border-radius: var(--radius); background: color-mix(in srgb, var(--surface) 88%, transparent); border-color: var(--pc-card-edge); box-shadow: 0 1px 2px rgba(40, 38, 34, .04), 0 14px 32px -22px rgba(40, 38, 34, .28); }
+[data-skin="porcelain"] .ph.now .ph-dot { border-color: var(--pc-gold); background: var(--pc-gold); box-shadow: 0 0 0 4px rgba(181, 154, 98, .2); }
+[data-skin="porcelain"] .ph-tag { color: var(--accent); border-color: color-mix(in srgb, var(--pc-gold) 60%, transparent); }
+[data-skin="porcelain"] .ph-prog i { background: linear-gradient(90deg, var(--pc-gold-2), var(--pc-gold)); }
+[data-skin="porcelain"] .ph-focus { border-radius: 14px; }
+[data-skin="porcelain"] :is(.rhythm > div, .wk-day) { border-radius: 14px; border-color: var(--pc-card-edge); background: color-mix(in srgb, var(--surface) 70%, transparent); }
+[data-skin="porcelain"] .rhythm > div.on, [data-skin="porcelain"] .wk-day.today { border-color: color-mix(in srgb, var(--pc-gold) 65%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pc-gold) 45%, transparent); background: color-mix(in srgb, var(--pc-gold) 7%, var(--surface)); }
+[data-skin="porcelain"] .wk-focus { background: var(--pc-btn); box-shadow: var(--pc-btn-shadow); }
+[data-skin="porcelain"] .iv-mic { background: var(--pc-btn); box-shadow: var(--pc-btn-shadow); color: var(--ink); }
+[data-skin="porcelain"] .iv-flow span { background: color-mix(in srgb, var(--surface-2) 80%, transparent); }
+
+/* 搜索框、窄屏筛选胶囊、标签页：玻璃胶囊 */
+[data-skin="porcelain"] .search-pill { border-radius: 999px; border-color: var(--pc-card-edge); background: color-mix(in srgb, var(--surface) 82%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7), 0 10px 24px -20px rgba(40, 38, 34, .35); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+[data-skin="porcelain"] .search-pill:focus-within { border-color: color-mix(in srgb, var(--pc-gold) 70%, transparent); box-shadow: 0 0 0 3px rgba(181, 154, 98, .16); }
+[data-skin="porcelain"] .search-pill input[type=search] { background: transparent; border-radius: 0; }
+[data-skin="porcelain"] .tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+[data-skin="porcelain"] .tabs::-webkit-scrollbar { display: none; }
+[data-skin="porcelain"] .tabs button { flex: none; white-space: nowrap; }
+@media (max-width: 1000px) {
+  [data-skin="porcelain"] .lib-side button { background: var(--pc-glass); border-color: color-mix(in srgb, var(--line) 80%, transparent); box-shadow: var(--pc-glass-edge); border-radius: 999px; }
+  [data-skin="porcelain"] .lib-side button.active { background: var(--pc-btn); border-color: transparent; color: var(--ink); font-weight: 600; box-shadow: var(--pc-btn-shadow); }
+}
+[data-skin="porcelain"] .pill-more { border-color: color-mix(in srgb, var(--pc-gold) 45%, var(--line)); color: var(--accent); }
+/* 错题本 */
+[data-skin="porcelain"] .wb-hero .ov-days b { font-weight: 400; color: var(--ink); text-shadow: var(--pc-emboss-sm); }
+[data-skin="porcelain"] .wb-tag { background: color-mix(in srgb, var(--pc-gold) 16%, var(--surface)); }
+[data-skin="porcelain"] .wb-btn { background: var(--pc-glass); border-color: color-mix(in srgb, var(--line) 80%, transparent); box-shadow: var(--pc-glass-edge); }
+[data-skin="porcelain"] .wb-reason { border-radius: 999px; }
+[data-skin="porcelain"] .wb-mods > div { border-radius: 14px; border-color: var(--pc-card-edge); background: color-mix(in srgb, var(--surface) 70%, transparent); }
+[data-skin="porcelain"] .wb-mods b { font-weight: 400; }
+/* 学习统计 */
+[data-skin="porcelain"] .heat i, [data-skin="porcelain"] .heat-legend i { border-radius: 3px; }
+[data-skin="porcelain"] .heat i.ck, [data-skin="porcelain"] .heat-legend i.ck { box-shadow: inset 0 0 0 1.5px var(--pc-gold); }
+[data-skin="porcelain"] .kpi-big b, [data-skin="porcelain"] .kpi-wrong b { font-weight: 400; }
+[data-skin="porcelain"] .kpi-bar i { background: linear-gradient(90deg, var(--pc-gold-2), var(--pc-gold)); }
+@media (max-width: 1000px) { [data-skin="porcelain"] .card.lib-side { background: none; border: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; } }
+
+[data-skin="porcelain"] .rd-toc .toc-i.on { background: color-mix(in srgb, var(--pc-gold) 10%, var(--surface)); box-shadow: inset 3px 0 var(--pc-gold); }
+@media (max-width: 1000px) { [data-skin="porcelain"] .rd-toc, [data-skin="porcelain"] .rd-panel { background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); } }
+@media (max-width: 720px) { [data-skin="porcelain"] .rd-acts .btn.ghost { background: var(--pc-glass); border-color: color-mix(in srgb, var(--line) 80%, transparent); box-shadow: var(--pc-glass-edge); } [data-skin="porcelain"] .rd-find input { border-radius: 999px; } }
+[data-skin="porcelain"] .pr-mod { border-radius: 999px; }
+[data-skin="porcelain"] .year-tag { color: var(--accent); font-family: var(--pc-serif); }
+[data-skin="porcelain"] .sd-input input { border-radius: 18px; border-color: var(--pc-card-edge); background: color-mix(in srgb, var(--surface) 70%, transparent); box-shadow: inset 0 1px 3px rgba(0,0,0,.06); }
+[data-skin="porcelain"] .sd-input input:focus { border-color: color-mix(in srgb, var(--pc-gold) 70%, transparent); box-shadow: 0 0 0 3px rgba(181,154,98,.16); }
+[data-skin="porcelain"] .drill-opts button { border-radius: 18px; border-color: var(--pc-card-edge); }
+[data-skin="porcelain"] .sd-dots i { border-radius: 3px; }
+[data-skin="porcelain"] .drill-q { font-family: var(--pc-serif); font-weight: 400; }
+@media (max-width: 1100px) { [data-skin="porcelain"] .essay-switch { border-radius: 999px; border-color: var(--pc-card-edge); background: var(--pc-glass); box-shadow: var(--pc-glass-edge), 0 8px 20px -14px rgba(40,38,34,.3); } [data-skin="porcelain"] .essay-switch button { border-radius: 999px; } [data-skin="porcelain"] .essay-switch button.active { background: var(--pc-btn); color: var(--ink); box-shadow: var(--pc-btn-shadow); } }
+
+/* 热力图：绿色（浅绿 → 墨绿），深色模式下反过来由暗到亮 */
+:root[data-skin="porcelain"] { --hm-0: #E8E7E3; --hm-1: #CFE5CC; --hm-2: #8FC48E; --hm-3: #4E9A57; --hm-4: #2C6A38; }
+:root[data-skin="porcelain"][data-theme="dark"] { --hm-0: #2A2A29; --hm-1: #1F3A26; --hm-2: #2F6339; --hm-3: #4E9A57; --hm-4: #8FD08F; }
+@media (prefers-color-scheme: dark) { :root[data-skin="porcelain"]:not([data-theme="light"]) { --hm-0: #2A2A29; --hm-1: #1F3A26; --hm-2: #2F6339; --hm-3: #4E9A57; --hm-4: #8FD08F; } }
+[data-skin="porcelain"] :is(.heat, .heat-legend) i { background: var(--hm-0); }
+[data-skin="porcelain"] :is(.heat, .heat-legend) i.l1 { background: var(--hm-1); }
+[data-skin="porcelain"] :is(.heat, .heat-legend) i.l2 { background: var(--hm-2); }
+[data-skin="porcelain"] :is(.heat, .heat-legend) i.l3 { background: var(--hm-3); }
+[data-skin="porcelain"] :is(.heat, .heat-legend) i.l4 { background: var(--hm-4); }
+[data-skin="porcelain"] .heat-legend i.ck { background: transparent; }
+[data-skin="porcelain"] .lib-cont-i { border-radius: 16px; border: 1px solid var(--pc-card-edge); background: color-mix(in srgb, var(--surface) 88%, transparent); box-shadow: 0 1px 2px rgba(40,38,34,.04), 0 12px 26px -20px rgba(40,38,34,.3); }
+[data-skin="porcelain"] .job-box { border-radius: 16px; }
+
+/* 手机首页顶部：星轨字再大一点，下面留出悬浮的空间；概览卡片收小一点 */
+@media (max-width: 560px) {
+  [data-skin="porcelain"] .h3d-art { width: 112%; margin: 0 -10% 0 -16px; }
+  [data-skin="porcelain"] .hero-3d { padding-bottom: 30px; }
+  [data-skin="porcelain"] .hero { margin-bottom: 26px; }
+  [data-skin="porcelain"] .h3d-figure { height: 186px; bottom: -6px; }
+  [data-skin="porcelain"] .overview { padding: 14px 16px 12px; }
+  [data-skin="porcelain"] .ov-label { font-size: 13px; }
+  [data-skin="porcelain"] .ov-days { margin: 0; }
+  [data-skin="porcelain"] .ov-days b { font-size: 50px; }
+  [data-skin="porcelain"] .ov-date { font-size: 12px; }
+  [data-skin="porcelain"] .ov-top { gap: 10px; }
+  [data-skin="porcelain"] .ov-side { padding-top: 10px; }
+  [data-skin="porcelain"] .ov-side span, [data-skin="porcelain"] .ov-stats span { font-size: 12px; }
+  [data-skin="porcelain"] .ov-side b { font-size: 22px; }
+  [data-skin="porcelain"] .ov-stats { margin-top: 10px; padding-top: 10px; }
+  [data-skin="porcelain"] .ov-stats b { font-size: 19px; }
+}
+
+/* 选中文字后的高亮工具条：和系统「拷贝 / 查询」菜单一样的透明液态玻璃，深色字 */
+[data-skin="porcelain"] .rd-tools {
+  color: var(--ink); border-radius: 22px; border: 1px solid rgba(255, 255, 255, .6);
+  background: linear-gradient(135deg, rgba(252, 252, 251, .93), rgba(246, 246, 244, .86));
+  backdrop-filter: blur(30px) saturate(190%); -webkit-backdrop-filter: blur(30px) saturate(190%);
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, .9), inset 0 0 18px -6px rgba(255, 255, 255, .8), 0 14px 34px -12px rgba(30, 28, 24, .35), 0 1px 3px rgba(0, 0, 0, .08);
+}
+[data-skin="porcelain"] .rd-tools button:not(.dot) { color: var(--ink); border-radius: 12px; }
+[data-skin="porcelain"] .rd-tools button:not(.dot):hover, [data-skin="porcelain"] .rd-tools button:not(.dot):active { background: rgba(0, 0, 0, .06); }
+[data-skin="porcelain"] .rd-tools .sep { background: rgba(0, 0, 0, .12); }
+[data-skin="porcelain"] .rd-tools .rd-tools-row + .rd-tools-row { border-top: 1px solid rgba(0, 0, 0, .08); padding-top: 6px; }
+[data-skin="porcelain"] .rd-tools .rd-books button[data-book] { background: rgba(255, 255, 255, .6); box-shadow: 0 0 0 .5px rgba(0, 0, 0, .1); }
+[data-skin="porcelain"] .rd-tools .rd-tools-lab { color: var(--ink-3); opacity: 1; }
+[data-skin="porcelain"] .rd-tools .dot { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08), 0 1px 2px rgba(0, 0, 0, .12); }
+[data-skin="porcelain"] .rd-tools .dot.on { box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px var(--pc-gold); }
+:root[data-skin="porcelain"][data-theme="dark"] .rd-tools { border-color: rgba(255, 255, 255, .12); background: linear-gradient(135deg, rgba(50, 50, 52, .92), rgba(34, 34, 36, .86)); box-shadow: inset 1px 1px 0 rgba(255, 255, 255, .12), 0 14px 34px -12px rgba(0, 0, 0, .6); }
+:root[data-skin="porcelain"][data-theme="dark"] .rd-tools button:not(.dot):hover { background: rgba(255, 255, 255, .1); }
+:root[data-skin="porcelain"][data-theme="dark"] .rd-tools .sep, :root[data-skin="porcelain"][data-theme="dark"] .rd-tools .rd-tools-row + .rd-tools-row { background-color: transparent; border-color: rgba(255, 255, 255, .12); }
+@media (prefers-color-scheme: dark) {
+  :root[data-skin="porcelain"]:not([data-theme="light"]) .rd-tools { border-color: rgba(255, 255, 255, .12); background: linear-gradient(135deg, rgba(50, 50, 52, .92), rgba(34, 34, 36, .86)); box-shadow: inset 1px 1px 0 rgba(255, 255, 255, .12), 0 14px 34px -12px rgba(0, 0, 0, .6); }
+  :root[data-skin="porcelain"]:not([data-theme="light"]) .rd-tools button:not(.dot):hover { background: rgba(255, 255, 255, .1); }
+  :root[data-skin="porcelain"]:not([data-theme="light"]) .rd-tools .rd-books button[data-book] { background: rgba(255, 255, 255, .1); }
+}

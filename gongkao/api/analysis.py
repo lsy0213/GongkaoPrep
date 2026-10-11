@@ -1,6 +1,6 @@
 """做题分析：按考点找弱项（对应到教程的课）、按题型看用时、建议的模块作答顺序、模考估分。"""
 
-from .. import topics
+from .. import exams, topics
 from ..scoring import SCORE_WEIGHTS, estimate_score
 from ..userdb import get_settings
 from . import route
@@ -14,6 +14,26 @@ TARGET_SECONDS = {
 MODULE_TARGET = {"政治理论": 30, "常识判断": 35, "言语理解与表达": 50, "数量关系": 75, "判断推理": 50, "资料分析": 70}
 
 MODULES = list(SCORE_WEIGHTS)
+
+
+def _topics():
+    """考点规则：公考用 topics.py，软考用 ruankao/topics.py。"""
+    if exams.is_default():
+        return topics
+    from ..ruankao import topics as rk_topics
+
+    return rk_topics
+
+
+def _modules():
+    return [m["name"] for m in exams.get().get("modules") or []] or MODULES
+
+
+def exam_score(per_module, total, correct):
+    """估分：公考按各模块分值比例折成百分制；软考综合知识每题 1 分，折成 75 分制。"""
+    if exams.is_default():
+        return estimate_score(per_module)
+    return round(correct / total * 75, 1) if total else 0.0
 
 
 def _target(module, sub):
@@ -45,7 +65,7 @@ def analysis(ctx):
     for _qid, tid in tmap.items():
         available[tid] = available.get(tid, 0) + 1
     topic_rows = []
-    for tp in topics.all_topics():
+    for tp in _topics().all_topics():
         st = per_topic.get(tp["id"], {"n": 0, "ok": 0, "sec": 0, "timed": 0, "recent": []})
         topic_rows.append({
             **tp, "n": st["n"], "correct": st["ok"], "acc": round(st["ok"] / st["n"] * 100) if st["n"] else None,
@@ -75,7 +95,8 @@ def analysis(ctx):
         elif a["seconds"] < target * 0.4 and not a["correct"]:
             s["fast_wrong"] += 1
     sub_rows = []
-    for (module, sub), s in sorted(per_sub.items(), key=lambda kv: (MODULES.index(kv[0][0]) if kv[0][0] in MODULES else 9, kv[0][1])):
+    mods = _modules()
+    for (module, sub), s in sorted(per_sub.items(), key=lambda kv: (mods.index(kv[0][0]) if kv[0][0] in mods else 9, kv[0][1])):
         sub_rows.append({"module": module, "sub": sub or module, "n": s["n"], "acc": round(s["ok"] / s["n"] * 100),
                          "avg_sec": round(s["sec"] / s["n"]), "target": _target(module, sub),
                          "over_pct": round(s["over"] / s["n"] * 100), "slow_right": s["slow_right"],
@@ -105,7 +126,7 @@ def analysis(ctx):
 def mock_history(ctx):
     """模考、限时练习、真题整卷的估分记录（按模块正确数折算），用来看分数走势。"""
     conn = ctx.conn
-    target = float(get_settings(conn).get("target_score") or 70)
+    target = float(get_settings(conn).get("target_score") or (70 if exams.is_default() else 45))
     sessions = conn.execute("SELECT id, title, total, correct, duration, created_at FROM sessions WHERE mode='exam' "
                             "ORDER BY id DESC LIMIT 60").fetchall()
     out = []
@@ -117,6 +138,6 @@ def mock_history(ctx):
         if not per:
             continue
         out.append({"id": s["id"], "title": s["title"], "created_at": s["created_at"], "total": s["total"],
-                    "correct": s["correct"], "duration": s["duration"], "score": estimate_score(per),
+                    "correct": s["correct"], "duration": s["duration"], "score": exam_score(per, s["total"], s["correct"]),
                     "modules": {m: {"ok": ok, "n": n} for m, (ok, n) in per.items()}})
-    return {"items": out[::-1], "target": target, "weights": SCORE_WEIGHTS}
+    return {"items": out[::-1], "target": target, "weights": SCORE_WEIGHTS, "full": 100 if exams.is_default() else 75}

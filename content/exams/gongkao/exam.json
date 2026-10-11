@@ -1,0 +1,76 @@
+{
+  "id": "gongkao",
+  "order": 1,
+  "family": "公考",
+  "name": "国考 + 四川省考",
+  "short": "公考",
+  "emblem": "公",
+  "color": "#A68B52",
+  "brand_sub": "国考 · 省考 · 公考小窝",
+  "title": "上岸备考 · 公考小窝",
+  "desc": "行测、申论、面试，从零基础到上岸",
+
+  "modules": [
+    {"name": "政治理论", "short": "政治"},
+    {"name": "常识判断", "short": "常识"},
+    {"name": "言语理解与表达", "short": "言语"},
+    {"name": "数量关系", "short": "数量"},
+    {"name": "判断推理", "short": "判断"},
+    {"name": "资料分析", "short": "资料"}
+  ],
+
+  "nav": [
+    {"route": "", "label": "首页", "glyph": "⌂"},
+    {"route": "plan", "label": "复习计划", "glyph": "☷"},
+    {"route": "positions", "label": "选岗", "glyph": "⚑"},
+    {"sec": "learn", "label": "学习", "items": [
+      {"route": "learn", "label": "系统教程", "glyph": "✎"},
+      {"route": "library", "label": "资料库", "glyph": "▥"},
+      {"route": "news", "label": "时政晨读", "glyph": "☼"}
+    ]},
+    {"sec": "xingce", "label": "行测", "items": [
+      {"route": "real", "label": "真题卷", "glyph": "卷"},
+      {"route": "practice", "label": "专项刷题", "glyph": "✐"},
+      {"route": "mock", "label": "模拟考试", "glyph": "⌛"},
+      {"route": "speed", "label": "速算训练", "glyph": "∑"}
+    ]},
+    {"sec": "shenlun", "label": "申论", "items": [
+      {"route": "essay", "label": "申论练习", "glyph": "✒"},
+      {"route": "notes", "label": "素材积累", "glyph": "❦"}
+    ]},
+    {"sec": "mianshi", "label": "面试", "items": [
+      {"route": "interview", "label": "面试练习", "glyph": "❝"}
+    ]},
+    {"sec": "review", "label": "复习", "items": [
+      {"route": "wrong", "label": "错题本", "glyph": "✗", "badge": "wrong"},
+      {"route": "cards", "label": "闪卡记忆", "glyph": "❖"},
+      {"route": "stats", "label": "学习统计", "glyph": "▤"}
+    ]},
+    {"route": "memo", "label": "笔记本", "glyph": "✍"},
+    {"sep": true},
+    {"route": "ai", "label": "AI 助教", "glyph": "✦"},
+    {"route": "settings", "label": "设置", "glyph": "⚙"}
+  ],
+
+  "routes": {
+    "": "home", "plan": "plan", "learn": "learn", "notes": "notes", "cards": "cards", "practice": "practice",
+    "mock": "mock", "speed": "speed", "essay": "essay", "interview": "interview", "wrong": "wrong", "memo": "memo",
+    "real": "real", "library": "library", "news": "news", "stats": "stats", "ai": "ai", "settings": "settings",
+    "resume": "resume", "positions": "positions", "exams": "exams"
+  },
+
+  "bottom_nav": [
+    ["", "首页", "home", ["", "plan", "stats"]],
+    ["practice", "刷题", "practice", ["practice", "real", "mock", "speed", "wrong"]],
+    ["cards", "闪卡", "cards", ["cards", "notes", "memo"]],
+    ["news", "时政", "news", ["news", "library", "learn"]]
+  ],
+
+  "timer": {
+    "modules": ["言语理解与表达", "数量关系", "判断推理", "资料分析", "政治理论", "常识判断", "申论", "面试", "阅读积累", "综合"],
+    "short": {"言语理解与表达": "言语", "数量关系": "数量", "判断推理": "判断", "资料分析": "资料", "政治理论": "政治", "常识判断": "常识", "阅读积累": "积累"},
+    "default": "综合"
+  },
+
+  "settings": {}
+}

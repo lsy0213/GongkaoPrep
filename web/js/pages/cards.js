@@ -1,7 +1,7 @@
 import { apiGet, apiPost, esc, mathText, shuffle, todayISO, toast } from "../lib.js";
 
 const SESSION = 20;
-const RATINGS = [[1, "重来", "danger"], [2, "困难", ""], [3, "良好", "primary"], [4, "简单", ""]];
+const RATINGS = [[1, "重来", "r-again"], [2, "困难", "r-hard"], [3, "良好", "r-good primary"], [4, "简单", "r-easy"]];
 
 // 下次间隔的说法：0 → 今天再看，3 → 3 天，45 → 1.5 个月
 function ivl(d) {
@@ -103,22 +103,22 @@ export async function render(el) {
         <span class="small muted num" id="count"></span></div>
       <div class="progress mb"><i id="bar"></i></div>
       <div class="flash">
-        <div class="flash-stage">
+        <div class="flash-stage fc-pile">
           <div class="flash-card" id="card" tabindex="0" role="button" aria-label="翻面">
             <span class="flash-stamp no">重来</span><span class="flash-stamp yes">良好</span>
             <div class="flash-inner">
-              <div class="flash-face flash-front"><div class="front" id="qf"></div><div class="small muted mt">先在心里回答，再按空格或点击卡片翻面</div></div>
+              <div class="flash-face flash-front"><div class="front" id="qf"></div><div class="small muted mt flash-hint">先在心里回答，再点一下卡片翻面</div></div>
               <div class="flash-face flash-back"><div class="q" id="qb"></div><div class="back" id="ab"></div></div>
             </div>
           </div>
         </div>
         <div class="flash-actions" id="acts-front">
-          <button class="btn lg" id="flip">翻面 <span class="kbd">空格</span></button>
+          <button class="btn lg flip-btn" id="flip">翻面 <span class="kbd">空格</span></button>
         </div>
         <div class="flash-actions rate" id="acts-back" hidden>
           ${RATINGS.map(([g, name, cls]) => `<button class="btn lg ${cls}" data-rate="${g}"><b>${name}</b><small data-ivl="${g}"></small><span class="kbd">${g}</span></button>`).join("")}
         </div>
-        <p class="small muted flash-tip">空格 翻面 · 1–4 打分 · ← 重来 · → 良好 · 也可以翻面后把卡片左右拖走</p>
+        <p class="small muted flash-tip"><span class="kbd-only">空格 翻面 · 1–4 打分 · ← 重来 · → 良好 · </span>翻面后也可以把卡片左右滑走：左滑重来，右滑良好</p>
       </div>`;
     const card = el.querySelector("#card");
     const front = el.querySelector("#acts-front"), back = el.querySelector("#acts-back");

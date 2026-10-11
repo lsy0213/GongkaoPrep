@@ -38,7 +38,9 @@ jobs:
       - name: 教程格式检查
         env:
           PYTHONIOENCODING: utf-8
-        run: python tools/check_course.py
+        run: |
+          python tools/check_course.py
+          python tools/check_course.py --exam ruankao-arch
 
       - name: 测试
         env:

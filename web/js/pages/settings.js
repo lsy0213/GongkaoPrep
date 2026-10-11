@@ -1,4 +1,8 @@
-import { apiGet, apiPost, bankMeta, clearBankCache, esc, fmtBytes, getAIStatus, saveFile, store, streamAI, toast, todayISO } from "../lib.js";
+import { EXAM, apiGet, apiPost, applyLook, bankMeta, clearBankCache, esc, fmtBytes, getAIStatus, saveFile, SKINS, store, streamAI, toast, todayISO } from "../lib.js";
+
+// 「考试与计划」里每门考试自己的设置项：公考是国考 / 省考日期和卷别，其他考试是自己的考试日期
+const GK_BASIC = ["nickname", "guokao_date", "shengkao_date", "start_date", "daily_hours", "paper_level"];
+const EX_BASIC = ["nickname", "exam_date", "start_date", "daily_hours"];
 
 const SAMPLE = `{
   "materials": [
@@ -37,24 +41,35 @@ export async function render(el) {
     bankMeta(true), apiGet("/api/jobs"), apiGet("/api/backups"), apiGet("/api/storage"), apiGet("/api/ai/usage").catch(() => null)]);
   const asrSt = await apiGet("/api/asr/status").catch(() => ({ installed: false, ready: false }));
   const lanSt = await apiGet("/api/lan/status").catch(() => ({ running: false }));
+  const mode = (await apiGet("/api/session").catch(() => ({ mode: "local" }))).mode;
   const fmtTok = (n) => (n >= 10000 ? (n / 10000).toFixed(n >= 1e6 ? 0 : 1) + " 万" : String(n));
   const aiPreset = presets[ai.provider] || presets.none;
   const c = b.counts, realCount = (c["国考"] || 0) + (c["四川"] || 0);
   const theme = store.get("theme", "system");
-
-  el.innerHTML = `
-    <div class="page-head"><div><div class="eyebrow">设置</div><h1>设置</h1></div></div>
-    <form class="card" id="basic">
-      <div class="card-head"><h2>考试与计划</h2></div>
-      <div class="grid cols-3">
-        <label class="field">怎么称呼你<input type="text" id="nickname" value="${esc(s.nickname)}" placeholder="可不填"></label>
+  const skin = document.documentElement.getAttribute("data-skin");
+  const gk = EXAM.id === "gongkao";
+  const basicFields = gk ? `
         <label class="field">国考笔试日期<input type="date" id="guokao_date" value="${esc(s.guokao_date)}"></label>
         <label class="field">省考笔试日期<input type="date" id="shengkao_date" value="${esc(s.shengkao_date)}"></label>
         <label class="field">开始备考日期<input type="date" id="start_date" value="${esc(s.start_date)}"></label>
         <label class="field">每天学习时长（小时）<input type="number" id="daily_hours" min="1" max="12" step="0.5" value="${esc(s.daily_hours)}"></label>
-        <label class="field">国考卷别<select id="paper_level">${["地市级", "副省级"].map((x) => `<option ${x === s.paper_level ? "selected" : ""}>${x}</option>`).join("")}</select></label>
+        <label class="field">国考卷别<select id="paper_level">${["地市级", "副省级"].map((x) => `<option ${x === s.paper_level ? "selected" : ""}>${x}</option>`).join("")}</select></label>`
+    : `
+        <label class="field">${esc(EXAM.cur.family || "")}考试日期<input type="date" id="exam_date" value="${esc(s.exam_date)}"></label>
+        <label class="field">开始备考日期<input type="date" id="start_date" value="${esc(s.start_date)}"></label>
+        <label class="field">每天学习时长（小时）<input type="number" id="daily_hours" min="1" max="12" step="0.5" value="${esc(s.daily_hours)}"></label>`;
+  const basicNote = gk
+    ? "默认日期是根据往年规律的预估：国考一般在 11 月底或 12 月初的周日；多省联考省考一般在 3 月中旬，江苏、浙江、上海、北京、广东、山东、四川、天津等单独命题的省份时间不同。公告发布后请改成准确日期。"
+    : (EXAM.cur.date_note || "默认日期是预估，报名后请按准考证上的考试日期修改；倒计时和复习计划都按这个日期排。");
+
+  el.innerHTML = `
+    <div class="page-head"><div><div class="eyebrow">设置</div><h1>设置</h1></div></div>
+    <form class="card" id="basic">
+      <div class="card-head"><h2>考试与计划</h2>${gk ? "" : `<span class="chip">${esc(EXAM.cur.family || "")} · ${esc(EXAM.cur.name || "")}</span>`}</div>
+      <div class="grid cols-3">
+        <label class="field">怎么称呼你<input type="text" id="nickname" value="${esc(s.nickname)}" placeholder="可不填"></label>${basicFields}
       </div>
-      <p class="small muted">默认日期是根据往年规律的预估：国考一般在 11 月底或 12 月初的周日；多省联考省考一般在 3 月中旬，江苏、浙江、上海、北京、广东、山东、四川、天津等单独命题的省份时间不同。公告发布后请改成准确日期。</p>
+      <p class="small muted">${esc(basicNote)}</p>
       <div class="row"><button class="btn primary" type="submit">保存</button></div>
     </form>
 
@@ -71,7 +86,13 @@ export async function render(el) {
       <div class="row"><button class="btn primary" type="submit">保存</button></div>
     </form>
 
-    <div class="card" id="lan">
+    ${mode === "remote" ? `<div class="card" id="account">
+      <div class="card-head"><h2>账号</h2><span class="chip good">已登录服务器</span></div>
+      <p class="small ink2" style="margin-top:0">这是放在服务器上的一份，学习记录存在服务器上，和电脑上的软件是分开的两份。密码在服务器上用 <code>python main.py --set-password</code> 修改。</p>
+      <form class="row" method="post" action="/logout"><button class="btn" type="submit">退出登录</button>
+        <button class="btn ghost" type="submit" formaction="/logout?all=1" title="换掉登录凭证，手机、电脑上都要重新输密码">退出所有设备</button></form>
+    </div>` : ""}
+    <div class="card" id="lan" ${mode !== "local" ? "hidden" : ""}>
       <div class="card-head"><h2>手机访问</h2><span class="chip ${lanSt.running ? "good" : ""}">${lanSt.running ? "已打开" : "已关闭"}</span></div>
       <p class="small ink2" style="margin-top:0">手机和电脑连同一个 Wi-Fi，用手机扫码就能在手机上背闪卡、读时政、刷题，记录都存在这台电脑上。
         电脑上的软件要开着；第一次打开时 Windows 可能弹出防火墙提示，选“允许”（专用网络）。</p>
@@ -88,7 +109,7 @@ export async function render(el) {
           <label class="small row" style="gap:4px"><input type="checkbox" id="lan-auto" ${lanSt.autostart ? "checked" : ""}> 以后启动软件时自动打开</label></div>`}
     </div>
 
-    <form class="card" id="asr-form">
+    <form class="card" id="asr-form" ${gk ? "" : "hidden"}>
       <div class="card-head"><h2>面试录音转文字（可选）</h2><span class="chip ${asrSt.ready ? "good" : ""}">${asrSt.ready ? "可用" : asrSt.installed ? "未填模型" : "未安装"}</span></div>
       <p class="small ink2" style="margin-top:0">面试练习可以录音、回听，并自动统计停顿；装了本机语音识别 <code>faster-whisper</code> 后，还能把录音转成文字，
         算语速、数口头禅，交给 AI 按你真正说的话点评。全部在本机处理，不上传录音。</p>
@@ -99,7 +120,11 @@ export async function render(el) {
 
     <div class="card">
       <div class="card-head"><h2>外观</h2></div>
-      <div class="seg" id="theme">${[["system", "跟随系统"], ["light", "浅色"], ["dark", "深色"]].map(([k, n]) => `<button data-t="${k}" class="${theme === k ? "active" : ""}">${n}</button>`).join("")}</div>
+      <div class="skin-opts" id="skin">${SKINS.map(([k, n, desc, colors]) => `
+        <button type="button" class="skin-opt ${skin === k ? "active" : ""}" data-sk="${k}" aria-pressed="${skin === k}">
+          <span class="skin-sw">${colors.map((c) => `<i style="background:${c}"></i>`).join("")}</span>
+          <b>${esc(n)}</b><small>${esc(desc)}</small></button>`).join("")}</div>
+      <div class="seg mt" id="theme">${[["system", "跟随系统"], ["light", "浅色"], ["dark", "深色"]].map(([k, n]) => `<button data-t="${k}" class="${theme === k ? "active" : ""}">${n}</button>`).join("")}</div>
     </div>
 
     <form class="card" id="ai">
@@ -143,7 +168,7 @@ export async function render(el) {
         <p>模型名称可以改成服务商提供的其他模型；各家模型名会更新，以服务商文档为准。申论批改要把整份材料发给 AI，建议选上下文较长的模型。</p></details>
     </form>
 
-    <form class="card" id="lib">
+    <form class="card" id="lib" ${mode !== "local" || !gk ? "hidden" : ""}>
       <div class="card-head"><h2>资料文件夹</h2>
         <span class="chip ${realCount ? "good" : "warn"}">${realCount ? `已整理真题 ${b.papers.length} 套${b.books.length ? `、题册 ${c["千题册"]} 题` : ""}` : "尚未整理"}</span></div>
       <p class="small ink2" style="margin-top:0">把真题、讲义、题册放在一个文件夹里（可以有子文件夹）。软件只读取、不会修改或移动这些文件；整理出的题库、全文索引和截图缓存保存在 <code>${esc(st.dir)}\\library</code>。</p>
@@ -153,11 +178,12 @@ export async function render(el) {
         <button class="btn ghost" type="button" data-job="real" title="重新识别真题和答案">只重建真题题库</button>
         <button class="btn ghost" type="button" data-job="books" title="识别千题册、5000题（扫描版需要 OCR）">只识别题册</button>
         <button class="btn ghost" type="button" data-job="index" title="重新提取 PDF 文字供搜索">只重建全文索引</button>
+        <button class="btn ghost" type="button" data-job="shizheng" title="资料文件夹里新增了时政、晨读资料后点这里，只处理新增或改动的文件">只整理时政晨读</button>
         <span class="small muted">${job.running ? `正在${esc(job.name)}：${esc(job.step)} ${job.done}/${job.total}` : job.finished_at ? `上次整理完成于 ${esc(job.finished_at)}` : ""}</span></div>
       <p class="small muted">新增资料后点“整理全部资料”，只会处理新增或改动过的文件。整理进度可以在“资料库”页查看。</p>
     </form>
 
-    <div class="card">
+    <div class="card" ${gk ? "" : "hidden"}>
       <div class="card-head"><h2>题库</h2><span class="small muted">内置 ${c["内置"] || 0} 题 · 真题卷 ${realCount} 题 · 题册 ${c["千题册"] || 0} 题 · 导入 ${b.custom_count} 题</span></div>
       <p class="small ink2" style="margin-top:0">可以把自己整理的真题或练习题按下面的格式存成 JSON 文件导入。module 必须是：政治理论、常识判断、言语理解与表达、数量关系、判断推理、资料分析；answer 用 0–3 表示 A–D。</p>
       <details><summary class="small" style="cursor:pointer">查看题目文件格式</summary><pre class="ref small" style="overflow-x:auto">${esc(SAMPLE)}</pre></details>
@@ -184,7 +210,7 @@ export async function render(el) {
       <p class="small muted">导入会覆盖当前的学习记录（AI Key 除外），导入前会自动留一份快照。</p>
     </div>
 
-    <div class="card" id="storage">
+    <div class="card" id="storage" ${mode !== "local" ? "hidden" : ""}>
       <div class="card-head"><h2>数据位置与空间</h2><span class="small muted">共 ${fmtBytes(st.total)} · 所在盘剩余 ${fmtBytes(st.free)}</span></div>
       <p class="small ink2" style="margin-top:0">学习记录、整理好的资料库、缓存都在这个文件夹：<br><code>${esc(st.dir)}</code></p>
       ${st.move_error ? `<p class="small" style="color:var(--bad)">上次搬移没有成功：${esc(st.move_error)}</p>` : ""}
@@ -274,7 +300,7 @@ export async function render(el) {
   el.querySelector("#basic").onsubmit = async (e) => {
     e.preventDefault();
     const body = {};
-    for (const k of ["nickname", "guokao_date", "shengkao_date", "start_date", "daily_hours", "paper_level"]) body[k] = el.querySelector("#" + k).value;
+    for (const k of gk ? GK_BASIC : EX_BASIC) body[k] = el.querySelector("#" + k).value;
     await apiPost("/api/settings", body);
     toast("已保存，复习计划已按新设置调整");
   };
@@ -310,8 +336,13 @@ export async function render(el) {
   }));
   el.querySelectorAll("#theme button").forEach((x) => (x.onclick = () => {
     store.set("theme", x.dataset.t);
-    applyTheme();
+    applyLook();
     el.querySelectorAll("#theme button").forEach((y) => y.classList.toggle("active", y === x));
+  }));
+  el.querySelectorAll("#skin button").forEach((x) => (x.onclick = () => {
+    store.set("skin", x.dataset.sk);
+    applyLook();
+    el.querySelectorAll("#skin button").forEach((y) => { y.classList.toggle("active", y === x); y.setAttribute("aria-pressed", String(y === x)); });
   }));
   const aiForm = el.querySelector("#ai");
   const prov = aiForm.querySelector("#ai_provider"), model = aiForm.querySelector("#ai_model"), base = aiForm.querySelector("#ai_base_url");
@@ -395,10 +426,4 @@ export async function render(el) {
       render(el);
     } catch (err) { toast(err.message, 4000); }
   };
-}
-
-export function applyTheme() {
-  const t = store.get("theme", "system");
-  if (t === "system") document.documentElement.removeAttribute("data-theme");
-  else document.documentElement.setAttribute("data-theme", t);
 }

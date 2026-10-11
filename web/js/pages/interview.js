@@ -59,6 +59,11 @@ function metricsText(m) {
   return parts.join(" · ");
 }
 
+// 答题思路「表明态度 → 分析意义 → …」拆成一步一个小块
+function flowSteps(text) {
+  return (text || "").split(/\s*→\s*/).map((x, i) => `<span><i class="num">${i + 1}</i>${esc(x)}</span>`).join("");
+}
+
 export async function render(el) {
   const data = await content("interview.json");
   const mine = (await apiGet("/api/interviews")).items;
@@ -185,11 +190,12 @@ export async function render(el) {
     const history = q ? mine.filter((m) => m.qid === q.id) : [];
     el.innerHTML = `
       <div class="page-head"><div><div class="eyebrow">面试练习</div><h1>结构化面试：计时开口说</h1>
-        <p>真实面试每题约 3 分钟。先思考 1 分钟列提纲，再计时作答；开着录音大声说出来，结束后回听、看停顿和语速。<span class="small muted">第一次录音时窗口会问是否允许使用麦克风，选“允许”。</span></p></div>
+        <p>思考 1 分钟列提纲，再计时作答 3 分钟；大声说出来，结束后回听、看停顿和语速。</p></div>
         <a class="btn" href="#/learn/interview">面试教程</a></div>
-      <div class="row mb"><div class="seg" id="types">${["全部", ...types].map((t) => `<button data-t="${esc(t)}" class="${t === type ? "active" : ""}">${esc(t)}</button>`).join("")}</div>
-        <span class="spacer"></span><label class="small row" style="gap:6px"><input type="checkbox" id="mic" ${useMic() ? "checked" : ""}
-          ${navigator.mediaDevices?.getUserMedia && window.MediaRecorder ? "" : "disabled"}> 作答时录音</label></div>
+      <div class="iv-bar">
+        <div class="pills scroll" id="types">${["全部", ...types].map((t) => `<button data-t="${esc(t)}" class="${t === type ? "active" : ""}">${esc(t)}</button>`).join("")}</div>
+        <label class="switch" title="第一次录音时会问是否允许使用麦克风，选“允许”"><input type="checkbox" id="mic" ${useMic() ? "checked" : ""}
+          ${navigator.mediaDevices?.getUserMedia && window.MediaRecorder ? "" : "disabled"}><span aria-hidden="true"></span>作答时录音</label></div>
       <div class="grid cols-main">
         <div class="card">
           ${q ? `
@@ -211,13 +217,17 @@ export async function render(el) {
                 <div class="row mt"><button class="btn primary" id="save">${savedId ? "已保存" : "保存这次练习"}</button></div>
                 <div class="mt" id="ai-iv"></div>
               </div>` : ""}
-          ` : `<div class="empty"><h3>点“抽一道题”开始</h3><button class="btn primary mt" id="next">抽一道题</button></div>`}
+          ` : `<div class="iv-start">
+              <span class="iv-mic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/></svg></span>
+              <h3>随机抽一道${type === "全部" ? "" : esc(type)}题</h3>
+              <p class="small muted">已练 ${new Set(mine.map((m) => m.qid)).size} / ${data.questions.length} 题 · 思考 1 分钟 · 作答 3 分钟</p>
+              <button class="btn primary lg" id="next">抽一道题</button></div>`}
           ${followBlock()}
         </div>
         <div class="stack" style="gap:16px">
-          <div class="card"><h3 class="mb">${q ? esc(q.type) + "的答题思路" : "各题型答题思路"}</h3>
-            ${q ? `<p class="ink2" style="margin:0">${esc(data.types[q.type])}</p>` :
-              types.map((t) => `<div style="margin-bottom:8px"><b>${esc(t)}</b><div class="small ink2">${esc(data.types[t])}</div></div>`).join("")}
+          <div class="card"><div class="card-head"><h3>${q ? esc(q.type) + "的答题思路" : "各题型答题思路"}</h3></div>
+            ${q ? `<div class="iv-flow">${flowSteps(data.types[q.type])}</div>` :
+              `<div class="iv-types">${types.map((t) => `<div class="iv-type"><b>${esc(t)}</b><div class="iv-flow">${flowSteps(data.types[t])}</div></div>`).join("")}</div>`}
           </div>
           ${history.length ? `<div class="card"><h3 class="mb">这道题的历史练习</h3>${history.map((h) => {
             let hm = null;

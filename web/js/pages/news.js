@@ -96,8 +96,8 @@ export async function render(el, ctx) {
       return section(m ? `${year} 年 ${m} 月` : `${year} 年（未标月份）`, list);
     }).join("");
     return `<div class="lib-layout"><div class="card lib-side" style="padding:12px 8px">
-        <h4>按机构</h4><div class="news-srcs">${["全部", ...srcs].map((s) => `<button data-src="${esc(s)}" class="${st.src === s ? "active" : ""}" title="${esc(SRC_NOTE[s] || "")}">${esc(s)}<small>${s === "全部" ? all.length : all.filter((d) => d.src === s).length}</small></button>`).join("")}</div>
-        <h4>按年份</h4>${side}</div>
+        <div class="side-grp"><h4>按机构</h4><div class="news-srcs">${["全部", ...srcs].map((s) => `<button data-src="${esc(s)}" class="${st.src === s ? "active" : ""}" title="${esc(SRC_NOTE[s] || "")}">${esc(s)}<small>${s === "全部" ? all.length : all.filter((d) => d.src === s).length}</small></button>`).join("")}</div></div>
+        <div class="side-grp"><h4>按年份</h4>${side}</div></div>
       <div class="card">${body}</div></div>`;
   }
 
@@ -119,24 +119,20 @@ export async function render(el, ctx) {
   function bankTab() {
     const all = secItems("时政题库");
     const withQ = items.filter((d) => d.sec === "月度时政" && d.nq);
-    const nMonthQ = withQ.reduce((a, d) => a + d.nq, 0);
     const groups = [["时政题", "时政题集"], ["专题题", "专题题集"], ["公基综合", "公基综合"]];
     const body = groups.map(([k, label]) => {
       const list = all.filter((d) => d.topic === k).sort((a, b) => (b.y || 0) - (a.y || 0) || b.m - a.m);
       return list.length ? section(label, list, { showMonth: true }) : "";
     }).join("");
-    const total = all.reduce((a, d) => a + d.nq, 0);
     const scope = st.drillScope || "6";
     return `<div class="card news-drill">
-        <div class="doc-sec-h"><h3>随机刷时政题</h3><span class="small muted">从全部讲义、题集里抽有答案的题，做完看对错和解析</span></div>
+        <div class="doc-sec-h"><h3>随机刷时政题</h3></div>
         <div class="row" style="gap:12px;flex-wrap:wrap">
           <span class="small ink2">范围</span><div class="seg" id="dr-scope">${[["3", "最近 3 个月"], ["6", "最近半年"], ["12", "最近一年"], ["0", "全部"]].map(([k, l]) =>
             `<button data-k="${k}" class="${scope === k ? "active" : ""}">${l}</button>`).join("")}</div>
           <span class="small ink2">题量</span><div class="seg" id="dr-n">${[10, 20, 50].map((k) => `<button data-k="${k}" class="${(st.drillN || 20) === k ? "active" : ""}">${k}</button>`).join("")}</div>
           <button class="btn primary" id="dr-go">开始</button></div></div>
       <div class="card mt">
-        <p class="small ink2" style="margin:0 0 14px">题都能直接点选项作答，选好按 <kbd>Enter</kbd> 看答案和解析（答案来自资料本身）。题集共 <b>${total}</b> 道；
-          另外月度讲义里还有随堂题 <b>${nMonthQ}</b> 道，在“月度时政”各月讲义里做，或者用上面的随机刷题。</p>
         ${body || `<div class="empty">还没有整理出题库</div>`}
         ${withQ.length ? section("带随堂题的月度讲义（最近）", withQ.sort((a, b) => b.y - a.y || b.m - a.m).slice(0, 12), { showMonth: true }) : ""}
       </div>`;
@@ -187,7 +183,6 @@ export async function render(el, ctx) {
           <span class="small muted">${mdays.length} 天 · ${mdays.reduce((a, d) => a + d.n, 0)} 个词 · 已学 ${nDone} 天（全部共 ${days.length} 天、${total} 个词）</span>
           <span class="spacer"></span>
           <div class="seg" id="cy-mode"><button data-m="read" class="${st.cyMode === "read" ? "active" : ""}">阅读</button><button data-m="test" class="${st.cyMode === "test" ? "active" : ""}" title="例句里的成语挖成空，自己回想后点开对答案">挖空自测</button></div></div>
-          <p class="small ink2" style="margin:0 0 12px">每天的句子摘自人民日报，标出的词就是当天积累的成语和实词，下面是释义。逻辑填空常考这些词在语境里的意思和搭配。</p>
           <div class="cy-days" id="cy-days">${mdays.map((d) => cyDayRow(d)).join("")}</div></div>
         ${drills.length ? `<div class="card">${section("随堂演练（逻辑填空题，可直接作答）", drills.filter((d) => d.kind !== "成语手册"))}
           ${drills.some((d) => d.kind === "成语手册") ? section("成语手册", drills.filter((d) => d.kind === "成语手册")) : ""}</div>` : ""}
@@ -299,11 +294,12 @@ export async function render(el, ctx) {
     el.innerHTML = `
       <div class="page-head"><div><div class="eyebrow">时政晨读</div><h1>时政热点与每日晨读</h1>
         <p>超格、小黑、粉笔的月度时政讲义，两会、一号文件、全会等专题，时政题库，人民日报每日精读和成语积累——都整理成了文字，带目录，题目可以直接作答。${latest ? `最新到 ${latest.y} 年 ${latest.m} 月。` : ""}</p></div>
-        <button class="btn" data-job="shizheng" title="资料文件夹里新增了时政、晨读资料后点这里，只处理新增或改动的文件">整理时政晨读</button></div>
+</div>
       ${jobBox(data.job)}
-      <form class="card lib-search mt" id="sf">
-        <input type="search" id="q" placeholder="搜时政内容，如：新质生产力、十五五、神舟、低空经济、乡村振兴" value="${esc(st.query)}" autocomplete="off">
-        <button class="btn primary">搜索</button>
+      <form class="search-pill" id="sf" role="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="10.6" cy="10.6" r="6.1"/><path d="m15.2 15.2 4.6 4.6"/></svg>
+        <input type="search" id="q" placeholder="搜时政：新质生产力、十五五、低空经济…" value="${esc(st.query)}" autocomplete="off" enterkeyhint="search" aria-label="搜时政内容">
+        <button class="btn primary sm">搜索</button>
       </form>
       <div id="hits" class="mt">${hitsBlock()}</div>
       <div class="tabs mt">${TABS.map(([k, label]) => `<button data-tab="${k}" class="${st.tab === k ? "active" : ""}">${label} <small class="muted">${c[k]}</small></button>`).join("")}</div>

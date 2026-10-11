@@ -1,11 +1,16 @@
-// 路由与外壳：根据地址栏 # 后面的路径加载对应页面；侧栏底部是专注计时器
-import { apiGet, apiPost, esc, fmtClock, initStore, parseHash, store, toast } from "./lib.js";
+// 路由与外壳：根据地址栏 # 后面的路径加载对应页面；侧栏底部是专注计时器。
+// 侧栏菜单、路由、计时科目来自当前考试的清单（content/exams/<id>/exam.json），左上角可以切换考试
+import { EXAM, apiGet, apiPost, applyLook, esc, fmtClock, initExam, initStore, parseHash, store, switchExam, toast } from "./lib.js";
+import { decorateNav, setBottomBadge, syncBottomNav } from "./navx.js";
 
+await initExam();
 await initStore();
 
-// 外观：跟随系统 / 浅色 / 深色（在设置页切换）
-const savedTheme = store.get("theme", "system");
-if (savedTheme !== "system") document.documentElement.setAttribute("data-theme", savedTheme);
+// 外观：界面风格 + 跟随系统 / 浅色 / 深色（在设置页切换）
+applyLook();
+buildShell();
+// 从哪里打开的（本机 / 局域网手机 / 服务器）：整理资料这类只能在电脑上做的操作，在手机和服务器上不显示
+apiGet("/api/session").then((r) => (document.documentElement.dataset.mode = r.mode)).catch(() => {});
 
 // 侧栏收起成图标栏，状态保存在本机
 document.body.classList.toggle("nav-collapsed", !!store.get("nav-collapsed", false));
@@ -46,11 +51,70 @@ document.getElementById("mobile-menu").onclick = () => document.body.classList.t
 document.getElementById("nav-scrim").onclick = () => document.body.classList.remove("nav-open");
 document.getElementById("nav").addEventListener("click", (e) => { if (e.target.closest("a.nav-item")) document.body.classList.remove("nav-open"); });
 
-const ROUTES = {
-  "": "home", plan: "plan", learn: "learn", notes: "notes", cards: "cards", practice: "practice",
-  mock: "mock", speed: "speed", essay: "essay", interview: "interview", wrong: "wrong", memo: "memo", real: "real", library: "library", news: "news",
-  stats: "stats", ai: "ai", settings: "settings", resume: "resume", positions: "positions",
-};
+// 路由 → 页面模块（pages/ 下的路径）。每门考试自己定，没有的路由回首页
+const ROUTES = EXAM.cur.routes || { "": "home" };
+
+// ---------------------------------------------------------------- 侧栏：菜单、考试切换
+
+// 清单里的菜单：{route, label, glyph, badge} 是一项；{sec, label, items} 是可折叠的一组；{sep} 是分隔线
+function navItemHTML(it) {
+  const badge = it.badge ? `<span class="badge" id="badge-${esc(it.badge)}" hidden></span>` : "";
+  return `<a class="nav-item" href="#/${esc(it.route)}" data-route="${esc(it.route)}"><span class="ico">${esc(it.glyph || "·")}</span><span class="label">${esc(it.label)}</span>${badge}</a>`;
+}
+function navHTML(items) {
+  return (items || []).map((it) => {
+    if (it.sep) return `<div class="nav-sep"></div>`;
+    if (it.sec) {
+      return `<div class="nav-sec" data-sec="${esc(it.sec)}">
+        <button class="nav-group" type="button" aria-expanded="true"><span class="ico caret" aria-hidden="true">›</span><span class="label">${esc(it.label)}</span></button>
+        <div class="nav-sec-body"><div><div>${(it.items || []).map(navItemHTML).join("")}</div></div></div>
+      </div>`;
+    }
+    return navItemHTML(it);
+  }).join("");
+}
+
+function examEmblem(e, cls = "exs-em") {
+  return `<span class="${cls}" style="--exs:${esc(e.color || "#8C6D35")}">${esc(e.emblem || (e.short || e.name || "?").slice(0, 1))}</span>`;
+}
+
+function buildShell() {
+  const ex = EXAM.cur;
+  document.getElementById("nav").innerHTML = navHTML(ex.nav);
+  if (ex.brand_sub) document.querySelector(".brand-sub").textContent = ex.brand_sub;
+  if (ex.title) document.title = ex.title;
+  document.documentElement.dataset.exam = ex.id;
+  const box = document.getElementById("exam-switch");
+  if (box && EXAM.list.length > 1) {
+    box.innerHTML = `
+      <button class="exs-btn" id="exs-btn" type="button" aria-haspopup="true" aria-expanded="false" title="切换考试">
+        ${examEmblem(ex)}
+        <span class="exs-txt"><span class="exs-k">当前考试 ⇄</span><span class="exs-n">${esc(ex.short || ex.name)}</span></span>
+        <span class="exs-caret" aria-hidden="true">⌄</span>
+      </button>
+      <div class="exs-menu" id="exs-menu" hidden>
+        <div class="exs-h">切换考试</div>
+        ${EXAM.list.map((e) => `<button class="exs-it${e.id === ex.id ? " on" : ""}" type="button" data-ex="${esc(e.id)}">
+          ${examEmblem(e)}<span class="exs-t"><b>${esc(e.family || "")}${e.family ? " · " : ""}${esc(e.name)}</b><small>${esc(e.level ? e.level + " · " : "")}${esc(e.desc || "")}</small></span>
+          <span class="exs-ck" aria-hidden="true">${e.id === ex.id ? "✓" : "›"}</span></button>`).join("")}
+        <div class="exs-sep"></div>
+        <a class="exs-it" href="#/exams"><span class="exs-em plain">◫</span><span class="exs-t"><b>全部考试总览</b><small>几门考试的倒计时和进度放一屏</small></span><span class="exs-ck" aria-hidden="true">›</span></a>
+      </div>`;
+    const btn = box.querySelector("#exs-btn"), menu = box.querySelector("#exs-menu");
+    const show = (on) => { menu.hidden = !on; btn.setAttribute("aria-expanded", String(on)); box.classList.toggle("open", on); };
+    btn.onclick = (e) => { e.stopPropagation(); show(menu.hidden); };
+    menu.onclick = (e) => {
+      const it = e.target.closest("[data-ex]");
+      if (it) switchExam(it.dataset.ex);
+      else if (e.target.closest("a")) show(false);
+    };
+    document.addEventListener("click", (e) => { if (!box.contains(e.target)) show(false); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") show(false); });
+  } else if (box) {
+    box.remove();
+  }
+  decorateNav();
+}
 
 const view = document.getElementById("view");
 let cleanup = null;
@@ -58,9 +122,10 @@ let renderSeq = 0;
 
 async function route() {
   const ctx = parseHash();
-  const name = ROUTES[ctx.route] || "home";
+  const name = ROUTES[ctx.route] || ROUTES[""] || "home";
   document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === (ROUTES[ctx.route] ? ctx.route : "")));
   revealActiveSec();
+  syncBottomNav(ROUTES[ctx.route] ? ctx.route : "");
   if (typeof cleanup === "function") {
     try { cleanup(); } catch { /* 忽略清理错误 */ }
   }
@@ -72,6 +137,7 @@ async function route() {
     if (seq !== renderSeq) return;
     view.scrollTop = 0;
     cleanup = await mod.render(view, ctx);
+    pageIn();
     if (seq === renderSeq && name !== "resume") {
       const { draftBannerHTML } = await import("./quiz.js");
       view.insertAdjacentHTML("afterbegin", draftBannerHTML());
@@ -89,12 +155,20 @@ export async function refreshBadge() {
     const d = await apiGet("/api/wrongbook");
     const due = d.items.filter((x) => !x.mastered && x.next_review <= d.today).length;
     const b = document.getElementById("badge-wrong");
-    b.textContent = due;
-    b.hidden = !due;
+    if (b) { b.textContent = due; b.hidden = !due; }
+    setBottomBadge(due);
   } catch { /* 角标失败不影响页面 */ }
 }
 
 window.addEventListener("hashchange", route);
+
+// 换页面时新页面轻轻浮上来（只在换页时播一次；同一页里重新渲染不播）
+function pageIn() {
+  view.classList.remove("page-in");
+  void view.offsetWidth;
+  view.classList.add("page-in");
+}
+view.addEventListener("animationend", (e) => { if (e.target === view) view.classList.remove("page-in"); });
 
 // “放弃”没做完的题
 document.addEventListener("click", async (e) => {
@@ -109,10 +183,13 @@ document.addEventListener("click", async (e) => {
 
 // ---------------------------------------------------------------- 专注计时器
 
-const TIMER_MODULES = ["言语理解与表达", "数量关系", "判断推理", "资料分析", "政治理论", "常识判断", "申论", "面试", "阅读积累", "综合"];
-const TIMER_SHORT = { "言语理解与表达": "言语", "数量关系": "数量", "判断推理": "判断", "资料分析": "资料", "政治理论": "政治", "常识判断": "常识", "阅读积累": "积累" };
+// 计时的科目由考试清单定（公考：言语、数量……；软考：综合知识、案例分析、论文……）
+const TIMER_CFG = EXAM.cur.timer || {};
+const TIMER_MODULES = TIMER_CFG.modules || ["综合"];
+const TIMER_SHORT = TIMER_CFG.short || {};
 const timerEl = document.getElementById("timer");
-let timer = store.get("timer", { running: false, minutes: 25, module: "综合", endAt: 0, startedAt: 0, remaining: 25 * 60 });
+let timer = store.get("timer", { running: false, minutes: 25, module: TIMER_CFG.default || TIMER_MODULES[0], endAt: 0, startedAt: 0, remaining: 25 * 60 });
+if (!TIMER_MODULES.includes(timer.module)) timer.module = TIMER_CFG.default || TIMER_MODULES[0];
 let tick = null;
 
 function saveTimer() { store.set("timer", timer); }

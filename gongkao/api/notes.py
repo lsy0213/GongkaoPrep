@@ -40,7 +40,7 @@ def essay_save(ctx):
          int(b.get("seconds") or 0), b.get("self_score"), json.dumps(b.get("checked") or []),
          b.get("ai_feedback") or "", now_str()),
     )
-    log_minutes(ctx.conn, "申论", round(int(b.get("seconds") or 0) / 60), "申论练习")
+    log_minutes(ctx.conn, b.get("module") or "申论", round(int(b.get("seconds") or 0) / 60), b.get("source") or "申论练习")
     return {"id": cur.lastrowid}
 
 

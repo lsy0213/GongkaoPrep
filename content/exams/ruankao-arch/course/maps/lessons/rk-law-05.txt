@@ -1,0 +1,22 @@
+# 专业英语：完形填空做法
+- 题目的样子
+- 做题步骤
+  - 看首句：首句通常点出主题，例如 “Architecture evaluation is…”…
+  - 找关键词：空格前后的词往往是固定搭配
+  - 用中文知识推：把句子大意翻成中文，结合学过的知识判断
+  - 排除法：词性不对、意思明显无关的先排除；剩两个时选和全文主题一致的
+- 常见的“送分”搭配
+  - loose coupling and high ___：cohesion
+  - quality attributes such as performance, secur…
+  - sensitivity points and ___ points：tradeoff
+  - the ___ layer is responsible for user interac…
+  - a ___ is a computational element, a connector…
+  - services communicate through lightweight ___ …
+  - a ___ is an independently deployable service：…
+- 备考建议
+  - 考场上英语题放在综合知识的最后做，不要在前面卡太久
+- 记忆要点
+  - 专业英语在综合知识中的位置：最后 5 题（第 71～75 题）
+  - 完形填空第一步：看首句确定主题
+  - 架构定义的三要素（英文）：elements等
+  - presentation layer：表现层

@@ -3,7 +3,7 @@
 按课文的 ## / ### 标题搭骨架，再从表格、加粗的列表项、要记住 / 易错框、记忆卡里摘知识点。
 起草出来只是草稿，要人工删改成精炼的导图；已经存在的导图不会覆盖。
 
-用法：python tools/draft_lesson_maps.py [课 id ...]
+用法：python tools/draft_lesson_maps.py [--exam 考试 id] [课 id ...]
 """
 
 import json
@@ -11,7 +11,8 @@ import os
 import re
 import sys
 
-ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "content", "course")
+BASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "content")
+ROOT = os.path.join(BASE, "course")
 OUT = os.path.join(ROOT, "maps", "lessons")
 SKIP_BLOCKS = {"quiz", "example", "reveal", "fill", "order", "match", "drill", "calc", "practice",
                "write", "speak", "check", "figure"}
@@ -76,7 +77,7 @@ def draft(lid, title):
             block = m.group(1)
             if block in ("key", "warn", "tip") and m.group(2).strip():
                 cur.append(f"- **{m.group(2).strip()}**")
-            if block == "cards" and "本课" in m.group(2):
+            if block == "cards" and ("本课" in m.group(2) or "记忆" in m.group(2)):
                 flush()
                 level = 0
                 tree.append("- 记忆要点")
@@ -102,10 +103,16 @@ def draft(lid, title):
 
 
 def main():
+    global ROOT, OUT
+    args = sys.argv[1:]
+    if args[:1] == ["--exam"] and len(args) > 1:
+        ROOT = os.path.join(BASE, "exams", args[1], "course")
+        OUT = os.path.join(ROOT, "maps", "lessons")
+        args = args[2:]
     with open(os.path.join(ROOT, "index.json"), encoding="utf-8") as f:
         index = json.load(f)
     lessons = [l for c in index["courses"] for l in c["lessons"]]
-    want = set(sys.argv[1:])
+    want = set(args)
     os.makedirs(OUT, exist_ok=True)
     n = 0
     for l in lessons:

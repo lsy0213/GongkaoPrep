@@ -76,6 +76,18 @@ class AIError(Exception):
     pass
 
 
+def _exam_ai():
+    """当前考试的 AI 设定（exam.json 的 ai：system 人设、domain 资料叫什么、focus 紧扣哪门考试的考法）。
+    公考没有写，用这里原来的说法。"""
+    from . import exams
+
+    return exams.get().get("ai") or {}
+
+
+def system_prompt():
+    return _exam_ai().get("system") or SYSTEM
+
+
 # 申论批改的固定评分细则：每次按同一套标准给分，分数才能前后比较、画走势
 ESSAY_RUBRIC = """请严格按下面的评分细则批改（国考 / 省考阅卷的常见做法，从严）：
 - 要点分（占满分的 70%）：把参考要点平均分配分值；答到给全分，答到一半给一半，没答到不给；要点之外的合理内容最多补 1 分。
@@ -170,7 +182,47 @@ def _clip(s, n=6000):
 
 
 def build_request(kind, body, history):
-    """把前端传来的内容组织成一次请求：返回 {messages, effort}。"""
+    """把前端传来的内容组织成一次请求：返回 {messages, effort, system}。system 是当前考试的 AI 人设。"""
+    req = _build_request(kind, body, history)
+    req.setdefault("system", system_prompt())
+    return req
+
+
+# 软考案例分析：按参考答案的评分点给分（阅卷按点给分，表述不同但意思对就给分）
+RK_CASE_RUBRIC = """请按软考高级（系统架构设计师）案例分析的阅卷方式批改，从严但合理：
+- 把参考答案拆成评分点，按这一问的分值分配；意思答对就给分（不要求和参考答案字句一样），答了一半给一半，错的、没答的不给；
+- 概念题看关键词是否准确（如质量属性名称、架构风格名称、评估方法），简答题看要点是否齐全、有没有结合题目说明里的场景；
+- 计算、填空、填表题只看结果和必要的过程。
+
+输出格式（第一行必须严格是这个格式，软件要读取分数）：
+【得分】x / {full}
+然后依次写：
+1. 一句话总评。
+2. 评分点核对：逐条列出评分点，标「答到 / 部分答到 / 遗漏 / 答错」，写这条给了几分。
+3. 最影响得分的问题，以及考场上怎么答更稳（答题模板、关键词）。
+4. 示范：按考场答题纸的篇幅写一份高分作答。"""
+
+# 软考论文：按考试大纲的论文评分维度（切合题意、应用深度、实践性、表达、综合分析）
+RK_PAPER_RUBRIC = """请按软考高级（系统架构设计师）论文的阅卷标准批改，满分 75 分，45 分及格。从严：没有真实项目、空谈理论、摘要缺失或字数明显不够的论文很难及格。
+评分维度（按比例给分）：
+- 切合题意（30%）：是否紧扣论题和三个问题逐一论述，有无跑题；
+- 应用深度与水平（20%）：理论是否准确、有深度，是否体现架构师的技术水平和判断；
+- 实践性（20%）：项目背景（时间、规模、本人角色）是否具体可信，技术方案、遇到的问题和解决办法是否来自实践，有没有数据和效果；
+- 表达能力（15%）：结构清楚、层次分明，语言通顺，没有错别字堆砌；
+- 综合能力与分析能力（15%）：能否总结经验教训、分析不足和改进方向。
+格式要求：摘要 300 字左右（不超过 400 字）；正文 2000–3000 字（机考打字，常见要求 2000–2500 字）；摘要过长、正文不足 1800 字要扣分。
+
+输出格式（第一行必须严格是这个格式，软件要读取分数）：
+【得分】x / 75
+然后依次写：
+1. 一句话总评（能不能及格）。
+2. 五个维度各得几分、扣在哪里。
+3. 摘要点评。
+4. 最影响得分的 3–5 个问题和可以直接照着改的修改建议（指出原文哪一段怎么改）。
+5. 一份适合这道论题的高分提纲（含每段写什么、写多少字）。"""
+
+
+def _build_request(kind, body, history):
     if kind == "essay":
         points = "\n".join(f"- {p}" for p in body.get("points") or [])
         if not points and body.get("reference"):
@@ -191,6 +243,31 @@ def build_request(kind, body, history):
             f"【考生作答】（共 {len(answer)} 字）\n{answer}\n\n"
             + ESSAY_RUBRIC.format(full=full)
         )
+        return {"messages": [{"role": "user", "content": content}], "effort": "high"}
+
+    if kind == "rkcase":
+        qs = body.get("questions") or []
+        if not any((q.get("answer") or "").strip() for q in qs):
+            raise ValueError("请先写下你的作答再请 AI 批改")
+        parts = []
+        for q in qs:
+            parts.append(f"【问题{q.get('n')}】（{q.get('score') or '?'} 分）{q.get('text')}\n"
+                         f"【参考答案】{_clip(q.get('reference'), 2500)}\n"
+                         f"【考生作答】{(q.get('answer') or '').strip() or '（未作答）'}")
+        full = body.get("score") or 25
+        content = (f"请批改下面这道软考案例分析题的作答。\n\n【说明】\n{_clip(body.get('material'), 6000)}\n\n"
+                   + "\n\n".join(parts) + "\n\n" + RK_CASE_RUBRIC.format(full=full))
+        return {"messages": [{"role": "user", "content": content}], "effort": "high"}
+
+    if kind == "rkpaper":
+        abstract, text = (body.get("abstract") or "").strip(), (body.get("body") or "").strip()
+        if len(text) < 200:
+            raise ValueError("正文太短了，写完再请 AI 批改")
+        reqs = "\n".join(f"{i + 1}. {r}" for i, r in enumerate(body.get("requirements") or []))
+        content = (f"请批改下面这篇软考系统架构设计师论文。\n\n【论题】{body.get('title')}\n"
+                   f"【题目背景】{_clip(body.get('background'), 1500)}\n【论述要求】\n{reqs}\n\n"
+                   f"【摘要】（{len(abstract)} 字）\n{abstract or '（没有写摘要）'}\n\n"
+                   f"【正文】（{len(text)} 字）\n{_clip(text, 9000)}\n\n" + RK_PAPER_RUBRIC)
         return {"messages": [{"role": "user", "content": content}], "effort": "high"}
 
     if kind == "explain":
@@ -266,12 +343,12 @@ def build_request(kind, body, history):
         if not sel:
             raise ValueError("先选中一段文字")
         content = (
-            f"我在看公考备考资料《{body.get('title')}》"
+            f"我在看{_exam_ai().get('domain', '公考')}备考资料《{body.get('title')}》"
             + (f"的“{body.get('section')}”部分" if body.get("section") else "") + "。\n\n"
             f"【我选中的内容】\n{_clip(sel, 3000)}\n\n"
             + (f"【前后文】\n{_clip(body.get('context'), 3000)}\n\n" if body.get("context") else "")
             + f"【我的问题】{question}\n\n"
-            "请用通俗的话回答，紧扣公务员考试（行测、申论、面试）的考法；需要时举一个真题风格的例子。"
+            f"请用通俗的话回答，紧扣{_exam_ai().get('focus', '公务员考试（行测、申论、面试）')}的考法；需要时举一个真题风格的例子。"
             "资料里有明显错误或过时的说法要指出来。"
         )
         return {"messages": [{"role": "user", "content": content}], "effort": "medium"}
@@ -281,10 +358,10 @@ def build_request(kind, body, history):
         if not question:
             raise ValueError("请先写下你的问题")
         content = (
-            f"我正在学习公考教程《{body.get('title')}》（{body.get('course')}）。下面是这一课的内容节选：\n\n"
+            f"我正在学习{_exam_ai().get('domain', '公考')}教程《{body.get('title')}》（{body.get('course')}）。下面是这一课的内容节选：\n\n"
             f"{_clip(body.get('text'), 6000)}\n\n"
             f"【我的问题】{question}\n\n"
-            "请结合这一课的方法回答：先直接回答，再举一个公考真题风格的例子说明，最后给一条可以马上用的做题建议。"
+            f"请结合这一课的方法回答：先直接回答，再举一个{_exam_ai().get('domain', '公考')}真题风格的例子说明，最后给一条可以马上用的做题建议。"
             "不确定的事实（如具体年份的考试安排）要说明以官方公告为准。"
         )
         return {"messages": [{"role": "user", "content": content}], "effort": "medium"}
@@ -359,7 +436,7 @@ def stream(settings, req):
         out.append(piece)
         yield piece
     if not usage.get("input") and not usage.get("output"):
-        prompt = SYSTEM + "".join(m["content"] for m in req["messages"])
+        prompt = req.get("system", SYSTEM) + "".join(m["content"] for m in req["messages"])
         usage.update(input=estimate_tokens(prompt), output=estimate_tokens("".join(out)), estimated=True)
 
 
@@ -368,7 +445,7 @@ def _openai_request(cfg, req, with_usage):
     url = base if base.endswith("/chat/completions") else base + "/chat/completions"
     body = {
         "model": cfg["model"],
-        "messages": [{"role": "system", "content": SYSTEM}] + req["messages"],
+        "messages": [{"role": "system", "content": req.get("system", SYSTEM)}] + req["messages"],
         "stream": True,
     }
     if with_usage:
@@ -456,7 +533,7 @@ def _stream_anthropic(cfg, req):
     params = {
         "model": cfg["model"],
         "max_tokens": 64000,
-        "system": SYSTEM,
+        "system": req.get("system", SYSTEM),
         "messages": req["messages"],
         "output_config": {"effort": req["effort"]},
     }

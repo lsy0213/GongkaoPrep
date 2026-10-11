@@ -1,5 +1,5 @@
 // 系统教程：学习路径 → 课程 → 课。课文在 content/course/<课 id>.md，互动块由 course.js 渲染
-import { apiGet, apiPost, content, esc, mountAIBox, store, toast } from "../lib.js";
+import { apiGet, apiPost, content, esc, MODULES, mountAIBox, store, toast } from "../lib.js";
 import { bindParts, parseLesson, renderParts, scoreOf } from "../course.js";
 import { bindHeadSearch, headSearchBox, hlRegex } from "../headsearch.js";
 import { mountMindMap } from "../mindmap.js";
@@ -14,7 +14,12 @@ const PRACTICE_LINK = {
   "申论": "#/essay",
   "面试": "#/interview",
   "综合": "#/mock",
+  // 软考
+  "案例分析": "#/case",
+  "论文": "#/paper",
 };
+// 课程对应的练习入口：上表里有的直接用；其他考试的知识模块去章节刷题
+const practiceLink = (m) => PRACTICE_LINK[m] || (MODULES.includes(m) ? "#/practice?module=" + encodeURIComponent(m) : "");
 
 // 学习进度：{ done: {课: 日期}, last: 课, lessons: {课: {quiz, check, drafts, note}} }
 function progress() {
@@ -90,7 +95,7 @@ function home(el, index, all) {
       </div>
     </div>
     <div class="card row lmap-entry"><div><b>知识导图</b>
-      <div class="small ink2">先看全局：笔试、面试各考什么、知识点怎么串起来；再按模块逐门展开，点节点上的 → 直接进入对应的课。</div></div>
+      <div class="small ink2">${esc(index.texts?.map_entry || "先看全局：笔试、面试各考什么、知识点怎么串起来；再按模块逐门展开，点节点上的 → 直接进入对应的课。")}</div></div>
       <span class="spacer"></span>
       <div class="lmap-tabs" style="margin:0"><a class="on" href="#/learn/map">总导图</a>${index.courses.map((c) =>
         `<a href="#/learn/map/${c.id}">${esc(c.title)}</a>`).join("")}</div>
@@ -109,16 +114,16 @@ function home(el, index, all) {
               <span class="progress"><i style="width:${st.pct}%"></i></span></span></a>`;
         }).join("")}</div>`;
     }).join("")}`;
-  return headSearch(el, all);
+  return headSearch(el, all, index);
 }
 
 // 页头右上角的小搜索框：搜课文，结果浮在框下方
 const HOT = ["截位直除", "增长率", "翻译推理", "图形推理", "逻辑填空", "倡议书", "结构化面试"];
 
-function headSearch(el, all) {
+function headSearch(el, all, index) {
   const byId = Object.fromEntries(all.map((l) => [l.id, l]));
   return bindHeadSearch(el, {
-    hot: HOT,
+    hot: index.texts?.hot || HOT,
     run: async (q) => {
       const r = await apiGet("/api/course/search?q=" + encodeURIComponent(q));
       const hits = r.hits.filter((h) => byId[h.id]);
@@ -145,8 +150,11 @@ function coursePage(el, index, course) {
   el.innerHTML = `
     <div class="row mb"><a class="btn sm ghost" href="#/learn">← 全部课程</a></div>
     <div class="page-head"><div><div class="eyebrow">第 ${course.stage} 阶段 · ${esc(stage?.name || "")}</div>
-      <h1>${esc(course.icon)} ${esc(course.title)}</h1><p>${esc(course.desc)}</p></div>
-      <div class="row"><span class="chip brand">已学 ${st.done} / ${st.total}</span>
+      <h1>${esc(course.icon)} ${esc(course.title)}</h1></div>
+      <div class="row course-cta">
+        <span class="course-prog" title="已学 ${st.done} 课，共 ${st.total} 课">
+          <svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15"/><circle class="fg" cx="18" cy="18" r="15" pathLength="100" stroke-dasharray="${st.pct} 100"/></svg>
+          <span><b class="num">${st.done}</b><i>/ ${st.total}</i><small>已学课数</small></span></span>
         <a class="btn primary" href="#/learn/${first.id}">${st.done ? "继续学习" : "开始学习"}</a></div></div>
     <div class="card">
       ${course.lessons.map((l, i) => {
@@ -159,9 +167,9 @@ function coursePage(el, index, course) {
     </div>
     <div class="card"><div class="card-head"><h3>知识导图</h3><a class="small" href="#/learn/map/${course.id}">大图查看 →</a></div>
       <div class="lmap" id="cmap"></div></div>
-    ${PRACTICE_LINK[course.module] ? `<div class="card row"><span class="ink2">学完一课就做对应的题，比全部学完再练效果好得多。</span><span class="spacer"></span>
-      <a class="btn" href="${PRACTICE_LINK[course.module]}">去练${esc(course.module === "综合" ? "模考" : course.module)}</a></div>` : ""}`;
-  return showMap(el.querySelector("#cmap"), index, flat(index), course.id, { open: 2 });
+    ${practiceLink(course.module) ? `<div class="card row"><span class="ink2">学完一课就做对应的题，比全部学完再练效果好得多。</span><span class="spacer"></span>
+      <a class="btn" href="${practiceLink(course.module)}">去练${esc(course.module === "综合" ? "模考" : course.module)}</a></div>` : ""}`;
+  return showMap(el.querySelector("#cmap"), index, flat(index), course.id, { open: 1 });
 }
 
 // ---------------------------------------------------------------- 知识导图
@@ -223,14 +231,14 @@ async function mapPage(el, index, all, cid) {
     <div class="row mb"><a class="btn sm ghost" href="#/learn">← 全部课程</a>
       ${course ? `<a class="btn sm ghost" href="#/learn/${course.id}">${esc(course.title)} · 课程目录</a>` : ""}</div>
     <div class="page-head"><div><div class="eyebrow">系统教程 · 知识导图</div>
-      <h1>${course ? `${esc(course.icon)} ${esc(course.title)}` : "公考知识总导图"}</h1>
+      <h1>${course ? `${esc(course.icon)} ${esc(course.title)}` : esc(index.texts?.map_title || "公考知识总导图")}</h1>
       <p>${course ? `这门课 ${course.lessons.length} 节课的全部知识点：一级是板块，往下是方法、公式和必记结论。点节点展开或收起，点 → 进入讲这个知识点的课。`
-        : "从报考到上岸的全局：笔试（行测六大模块 + 申论）、面试、备考与考场策略。点 → 进入各模块的详细导图。"}</p></div></div>
+        : esc(index.texts?.map_desc || "从报考到上岸的全局：笔试（行测六大模块 + 申论）、面试、备考与考场策略。点 → 进入各模块的详细导图。")}</p></div></div>
     <div class="lmap-tabs"><a href="#/learn/map" class="${course ? "" : "on"}">总导图</a>${index.courses.map((c) =>
       `<a href="#/learn/map/${c.id}" class="${c === course ? "on" : ""}">${esc(c.icon)} ${esc(c.title)}</a>`).join("")}</div>
     <div class="card"><div id="map"></div>
       <div class="small muted lmap-note">拖动平移 · Ctrl + 滚轮缩放 · 点节点展开 / 收起 · “全屏”看大图 · ✓ 表示对应的课已学完</div></div>`;
-  return showMap(el.querySelector("#map"), index, all, course?.id, { open: 2 });
+  return showMap(el.querySelector("#map"), index, all, course?.id, { open: 1 });
 }
 
 // ---------------------------------------------------------------- 课
@@ -364,7 +372,7 @@ async function lessonPage(el, index, all, lesson) {
   }
   function drawDone() {
     const box = el.querySelector("#donebox");
-    const link = PRACTICE_LINK[course.module];
+    const link = practiceLink(course.module);
     box.innerHTML = p.done[lesson.id]
       ? `<span class="chip good">已于 ${esc(p.done[lesson.id])} 学完</span> <button class="btn sm ghost" id="undo">标为未学</button>`
       : `<button class="btn primary" id="done">学完了，记录 ${lesson.min} 分钟</button>`;

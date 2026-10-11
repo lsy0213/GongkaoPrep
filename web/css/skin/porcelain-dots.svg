@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width="640" height="640">
+  <!-- 白瓷星轨的背景：稀疏的深灰小圆点（本项目原创） -->
+  <g fill="#3A3A3A">
+    <circle cx="62" cy="88" r="2.6" opacity=".55"/><circle cx="242" cy="40" r="1.8" opacity=".4"/><circle cx="520" cy="122" r="3" opacity=".5"/>
+    <circle cx="380" cy="260" r="1.6" opacity=".35"/><circle cx="140" cy="350" r="2.2" opacity=".45"/><circle cx="600" cy="400" r="1.8" opacity=".4"/>
+    <circle cx="300" cy="520" r="2.8" opacity=".5"/><circle cx="470" cy="590" r="1.6" opacity=".35"/><circle cx="40" cy="560" r="2" opacity=".4"/>
+  </g>
+</svg>

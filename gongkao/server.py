@@ -20,7 +20,7 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import ai, api, library, qdb, shizheng, userdb
+from . import ai, api, exams, library, qdb, shizheng, userdb
 from . import docs as docmod
 from .paths import content_dir, web_dir
 from .userdb import db, get_settings, init_db, now_str, rows  # noqa: F401 —— 兼容旧的调用方式
@@ -86,9 +86,19 @@ class Handler(BaseHTTPRequestHandler):
         ctype = mimetypes.guess_type(path)[0] or "application/octet-stream"
         if ctype.startswith("text/") or ctype in ("application/javascript", "application/json"):
             ctype += "; charset=utf-8"
+        # 带上 ETag：浏览器再问时没变就回 304，手机经服务器打开时不用每次重新下载脚本、样式、字体
+        st = os.stat(path)
+        etag = f'"{st.st_mtime_ns:x}-{st.st_size:x}"'
+        if self.headers.get("If-None-Match") == etag and not set_session:
+            self.send_response(304)
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            return
         with open(path, "rb") as f:
             body = f.read()
         self.send_response(200)
+        self.send_header("ETag", etag)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-cache")
@@ -111,9 +121,22 @@ class Handler(BaseHTTPRequestHandler):
         """这个请求是不是从局域网（手机）来的。"""
         return bool(getattr(self.server, "lan", False))
 
+    @property
+    def is_remote(self):
+        """服务器模式（--server）：经 Nginx 从外网来的请求，要先用密码登录（remote.py）。"""
+        return bool(getattr(self.server, "remote", False))
+
+    def client_ip(self):
+        # 服务器模式只听 127.0.0.1，前面的 Nginx 把真实地址放在 X-Real-IP 里
+        return (self.headers.get("X-Real-IP") or "").strip() if self.is_remote else self.client_address[0]
+
     def host_ok(self):
         """Host 必须是本机地址（防 DNS 重绑定：恶意域名解析到 127.0.0.1 时，Host 是那个域名）。"""
         host = (self.headers.get("Host") or "").strip().lower()
+        if self.is_remote:
+            from . import remote
+
+            return host in remote.allowed_hosts()
         if self.is_lan:
             return host in getattr(self.server, "extra_hosts", ())
         port = self.server.server_address[1]
@@ -127,6 +150,10 @@ class Handler(BaseHTTPRequestHandler):
         return m.value if m else ""
 
     def session_ok(self):
+        if self.is_remote:
+            from . import remote
+
+            return remote.token_ok(self.cookie(remote.REMOTE_COOKIE))
         if self.is_lan:
             from . import lan
 
@@ -143,8 +170,12 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if ctype != "application/json" and not (path in UPLOAD_API and ctype.startswith(UPLOAD_API[path])):
             return False
+        return self.same_origin()
+
+    def same_origin(self):
         origin = (self.headers.get("Origin") or "").lower()
-        if origin and origin != "http://" + (self.headers.get("Host") or "").strip().lower():
+        scheme = "https://" if self.is_remote else "http://"  # 服务器模式外面是 Nginx 的 HTTPS
+        if origin and origin != scheme + (self.headers.get("Host") or "").strip().lower():
             return False
         return (self.headers.get("Sec-Fetch-Site") or "same-origin") in ("same-origin", "none")
 
@@ -154,11 +185,27 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json({"error": "请求被拒绝：" + why}, 403)
 
     def guard(self, path):
-        """放行返回 True；不放行时已经回了 403。"""
+        """放行返回 True；不放行时已经回了 403。顺便按 Cookie 定下这个请求读写哪门考试的数据（exams.py）。"""
+        exams.set_request(self.cookie(exams.COOKIE))
         if not self.host_ok():
             self.deny("只接受本机访问")
             return False
-        if self.is_lan:
+        if self.is_remote:
+            # 服务器：登录页、图标、启动检查不用登录；其他（包括页面本身）没登录就跳去登录；管理类接口一律不行
+            from . import lan
+
+            if path in ("/login", "/logout", "/logo.svg", "/img/apple-touch-icon.png", "/img/icon-192.png", "/img/logo-porcelain.png") or path in PUBLIC_API:  # 主屏幕图标 iPhone 不带 Cookie 取
+                return True
+            if not self.session_ok():
+                if path.startswith("/api/"):
+                    self.send_json({"error": "还没有登录或登录已过期，请刷新页面重新登录", "login": True}, 401)
+                else:
+                    self.redirect("/login")
+                return False
+            if path.startswith(lan.DENY_PREFIXES):
+                self.deny("服务器上不能用这个功能，请在电脑上的软件里操作")
+                return False
+        elif self.is_lan:
             # 手机：除了配对页，连页面本身都要先配对；管理类接口一律不行
             from . import lan
 
@@ -190,6 +237,60 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Set-Cookie", cookie)
         self.end_headers()
         self.wfile.write(body)
+
+    def redirect(self, location, cookie=""):
+        self.send_response(302)
+        self.send_header("Location", location)
+        self.send_header("Cache-Control", "no-store")
+        if cookie:
+            self.send_header("Set-Cookie", cookie)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def send_login(self, error="", status=200):
+        from . import remote
+
+        body = remote.login_page(error).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def handle_login(self):
+        """服务器模式的登录：表单提交密码，对了发长期 Cookie 回首页。"""
+        from . import remote
+
+        if self.command == "GET":
+            return self.redirect("/") if self.session_ok() else self.send_login()
+        if not self.same_origin():
+            return self.deny("来源不明")
+        ip = self.client_ip()
+        wait = remote.locked(ip)
+        if wait:
+            return self.send_login(f"输错太多次了，请 {wait // 60 + 1} 分钟后再试", 429)
+        n = int(self.headers.get("Content-Length") or 0)
+        form = parse_qs(self.rfile.read(min(n, 4096)).decode("utf-8", "replace")) if n > 0 else {}
+        if not remote.has_password():
+            return self.send_login("服务器上还没有设置密码：在服务器上运行 python main.py --set-password", 503)
+        if not remote.check_password((form.get("password") or [""])[0]):
+            remote.record_fail(ip)
+            log.warning("服务器登录失败：%s", ip)
+            return self.send_login("密码不对", 403)
+        remote.clear_fails(ip)
+        log.info("服务器登录：%s", ip)
+        self.redirect("/", cookie=remote.cookie_header(remote.token()))
+
+    def handle_logout(self):
+        """退出登录：只清掉这台设备的 Cookie；?all=1 换掉凭证，所有设备都要重新登录。"""
+        from . import remote
+
+        if self.command != "POST" or not self.same_origin() or not self.session_ok():
+            return self.deny("来源不明")
+        if parse_qs(urlparse(self.path).query).get("all") == ["1"]:
+            remote.reset_token()
+        self.redirect("/login", cookie=remote.cookie_header("", max_age=0))
 
     def handle_pair(self, query):
         """手机扫码配对：配对码对了就发长期 Cookie，跳到首页。"""
@@ -323,6 +424,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.is_lan and path == "/pair":
             return self.handle_pair(parse_qs(url.query))
+        if self.is_remote and path in ("/login", "/logout"):
+            return self.handle_login() if path == "/login" else self.handle_logout()
         try:
             if path.startswith("/api/crop/"):
                 return self.send_crop(path[len("/api/crop/"):])
@@ -349,13 +452,17 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_error(HTTPStatus.FORBIDDEN)
         if not os.path.isfile(p):
             p = os.path.join(STATIC_DIR, "index.html")
-        self.send_file(p, set_session=os.path.basename(p) == "index.html" and not self.is_lan)
+        self.send_file(p, set_session=os.path.basename(p) == "index.html" and not self.is_lan and not self.is_remote)
 
     def do_POST(self):
         url = urlparse(self.path)
         path = unquote(url.path)
         if not self.guard(path):
             return
+        if self.is_remote and path == "/login":
+            return self.handle_login()
+        if self.is_remote and path == "/logout":
+            return self.handle_logout()
         if path in UPLOAD_API:
             return self.handle_upload(path, parse_qs(url.query))
         try:
@@ -489,21 +596,29 @@ def auto_build():
         library.jobs.start("整理时政晨读", lambda j: library.build_shizheng(root, j))
 
 
-def start_server():
-    """初始化数据库并在后台线程启动服务，返回端口号。"""
+def start_server(remote_port=0):
+    """初始化数据库并在后台线程启动服务，返回端口号。
+
+    remote_port 不为 0 时是服务器模式（main.py --server）：固定监听 127.0.0.1 的这个端口（前面是 Nginx），
+    每个请求都要先登录（remote.py），不自动整理资料、不开局域网手机访问。
+    """
     init_db()
-    auto_build()
-    try:
-        server = ThreadingHTTPServer((HOST, PREFERRED_PORT), Handler)
-    except OSError:
-        server = ThreadingHTTPServer((HOST, 0), Handler)
+    if remote_port:
+        server = ThreadingHTTPServer((HOST, remote_port), Handler)
+        server.remote = True
+    else:
+        auto_build()
+        try:
+            server = ThreadingHTTPServer((HOST, PREFERRED_PORT), Handler)
+        except OSError:
+            server = ThreadingHTTPServer((HOST, 0), Handler)
     server.daemon_threads = True
     threading.Thread(target=server.serve_forever, daemon=True).start()
     from .api.storage import warm_up
 
     threading.Thread(target=warm_up, name="warm-up", daemon=True).start()
     # 上次开着“手机访问”：接着开（--serve 开发模式不开，免得和正在用的窗口抢端口）
-    if "--serve" not in sys.argv:
+    if "--serve" not in sys.argv and not remote_port:
         with db() as conn:
             s = {r[0]: r[1] for r in conn.execute("SELECT key, value FROM settings WHERE key IN ('lan_autostart', 'lan_ip')")}
         if s.get("lan_autostart") == "1":

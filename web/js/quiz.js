@@ -1,5 +1,5 @@
 // 做题引擎：练习模式（选完立即看解析）、考试模式（交卷后看结果）、复习模式（错题重做）
-import { apiGet, apiPost, cropHTML, getQuestions, esc, fmtClock, LETTERS, md, MODULES, MODULE_SHORT, mountAIBox, needsCrop, srcLabel, store, toast } from "./lib.js";
+import { EXAM, apiGet, apiPost, cropHTML, getQuestions, esc, fmtClock, LETTERS, md, MODULES, MODULE_SHORT, mountAIBox, needsCrop, srcLabel, store, toast } from "./lib.js";
 import { refreshBadge } from "./app.js";
 
 const MODE_NAME = { practice: "练习", exam: "模考", review: "错题复习" };
@@ -334,8 +334,10 @@ export async function runQuiz(el, { title, ids, mode = "practice", timeLimit = 0
         <div class="card">
           <div class="row" style="align-items:flex-end;gap:24px">
             <div><div class="score-big">${right.length}<small> / ${total} 题</small></div><div class="muted">正确率 ${pct}% · 用时 ${fmtClock(elapsed())}</div></div>
-            ${mode === "exam" && st.score != null ? `<div title="按常见估分口径（各模块每题分值比例）折算成百分制，只用来看走势，不代表真实计分">
-              <div class="score-big">${st.score}<small> 分</small></div><div class="muted">估分（百分制）· <a href="#/mock">看走势</a></div></div>` : ""}
+            ${mode === "exam" && st.score != null ? (EXAM.id === "gongkao" ? `<div title="按常见估分口径（各模块每题分值比例）折算成百分制，只用来看走势，不代表真实计分">
+              <div class="score-big">${st.score}<small> 分</small></div><div class="muted">估分（百分制）· <a href="#/mock">看走势</a></div></div>`
+              : `<div title="综合知识每题 1 分，按 75 分折算；45 分及格">
+              <div class="score-big">${st.score}<small> / 75</small></div><div class="muted">${st.score >= 45 ? "过了 45 分及格线" : `离 45 分及格线还差 ${Math.ceil(45 - st.score)} 分`} · <a href="#/mock">看走势</a></div></div>`) : ""}
             <span class="spacer"></span>
             <span class="chip ${pct >= 80 ? "good" : pct >= 60 ? "warn" : "bad"}">${pct >= 80 ? "很好，保持住" : pct >= 60 ? "还不错，看看错题" : "别灰心，先吃透错题"}</span>
           </div>

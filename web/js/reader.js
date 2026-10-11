@@ -354,16 +354,18 @@ export async function openReader(el, id, startSeq, startFlash) {
         <div class="rd-title"><b title="${esc(d.rel)}">${esc(d.title)}</b>
           <span class="small muted">${d.chars > 10000 ? `约 ${(d.chars / 10000).toFixed(1)} 万字` : `${d.chars} 字`}${scannedDoc ? " · 扫描件已识别文字" : ""}${nQ ? ` · 例题 ${nQ} 道，选好按 Enter 看答案` : ""} · <span id="pct">已读 ${pct()}%</span></span></div>
         <span class="spacer"></span>
-        <form id="findf" class="rd-find"><input type="search" id="findq" placeholder="在本资料中查找" autocomplete="off"></form>
-        <div class="seg"><button id="fminus" title="字号减小">A−</button><button id="fplus" title="字号增大">A+</button></div>
-        <button class="btn sm ghost" id="tocbtn" title="显示 / 隐藏目录">目录</button>
-        <button class="btn sm ghost" id="marksbtn">标注 <span id="mcount">${marks.length}</span></button>
-        <button class="btn sm ghost" id="aibtn">问 AI</button>
-        <button class="btn sm ghost" id="fav">${prog.fav ? "★ 已收藏" : "☆ 收藏"}</button>
-        <button class="btn sm ghost" id="done">${prog.done ? "✓ 已读完" : "标记读完"}</button>
+        <form id="findf" class="rd-find"><input type="search" id="findq" placeholder="在本资料中查找" autocomplete="off" enterkeyhint="search"></form>
+        <div class="rd-acts">
+          <button class="btn sm ghost" id="tocbtn" title="显示 / 隐藏目录">目录</button>
+          <div class="seg"><button id="fminus" title="字号减小">A−</button><button id="fplus" title="字号增大">A+</button></div>
+          <button class="btn sm ghost" id="marksbtn">标注 <span id="mcount">${marks.length}</span></button>
+          <button class="btn sm ghost" id="aibtn">问 AI</button>
+          <button class="btn sm ghost" id="fav">${prog.fav ? "★ 已收藏" : "☆ 收藏"}</button>
+          <button class="btn sm ghost" id="done">${prog.done ? "✓ 已读完" : "标记读完"}</button>
+        </div>
       </div>
       <div class="rd-body ${store.get("reader-toc", true) ? "" : "no-toc"}">
-        <aside class="rd-toc" id="toc">${tocHTML()}</aside>
+        <aside class="rd-toc" id="toc"><div class="toc-head"><b>目录</b><button type="button" class="toc-close" aria-label="关闭目录">×</button></div>${tocHTML()}</aside>
         <article class="rd-doc" id="doc" style="font-size:${fontSize}px">${bodyHTML()}</article>
         <aside class="rd-panel" id="panel" hidden></aside>
       </div>
@@ -377,6 +379,7 @@ export async function openReader(el, id, startSeq, startFlash) {
         <div class="rd-tools-row rd-books" id="bookrow"></div>
       </div>
       <div class="rd-pop" id="markpop" hidden></div>
+      <div class="toc-scrim" id="tocscrim"></div>
     </div>`;
 
   const doc = el.querySelector("#doc");
@@ -559,6 +562,9 @@ export async function openReader(el, id, startSeq, startFlash) {
     sel.hits = marksIn(sel);
     paintHl();
     tools.hidden = false;
+    // 触屏：系统的「拷贝 / 查询」菜单会出现在选区旁边，工具条就固定在屏幕下方（底栏上面），两个互不遮挡
+    tools.classList.toggle("dock", TOUCH);
+    if (TOUCH) { tools.style.top = ""; tools.style.left = ""; return; }
     const r = sel.rect, h = tools.offsetHeight;
     const top = r.top - h - 8 < 60 ? r.bottom + 8 : r.top - h - 8;
     tools.style.top = top + "px";
@@ -570,6 +576,22 @@ export async function openReader(el, id, startSeq, startFlash) {
     setTimeout(showTools, 10);
   };
   doc.addEventListener("mouseup", onMouseUp);
+  // 手机上长按选字不会触发 mouseup：改听选区变化（停下来 0.3 秒再弹工具条）。
+  // 点工具条上的按钮时 iOS 会先把选区清掉，所以按下工具条的这一会儿不收起，按钮用的是之前记下的选区
+  const TOUCH = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+  let selTimer = 0, toolsBusy = false;
+  const onSelChange = () => {
+    clearTimeout(selTimer);
+    selTimer = setTimeout(() => {
+      if (currentSelection()) showTools();
+      else if (!toolsBusy) tools.hidden = true;
+    }, 300);
+  };
+  if (TOUCH) {
+    document.addEventListener("selectionchange", onSelChange);
+    cleanups.push(() => document.removeEventListener("selectionchange", onSelChange));
+    tools.addEventListener("pointerdown", () => { toolsBusy = true; setTimeout(() => (toolsBusy = false), 800); });
+  }
   const onDocDown = (e) => {
     if (!tools.contains(e.target)) tools.hidden = true;
     if (!pop.contains(e.target) && !e.target.closest?.("mark.hl")) pop.hidden = true;
@@ -1162,11 +1184,17 @@ export async function openReader(el, id, startSeq, startFlash) {
     }
   }
 
+  // 手机（窄屏）上目录是从底部滑上来的面板：点目录项跳过去后自动收起
+  const NARROW = window.matchMedia("(max-width: 1000px)");
+  const rdEl = el.querySelector(".rd");
+  const setSheet = (on) => rdEl.classList.toggle("toc-sheet", on);
+  el.querySelector("#tocscrim").onclick = () => setSheet(false);
   tocEl.addEventListener("click", (e) => {
+    if (e.target.closest(".toc-close")) { setSheet(false); return; }
     const f = e.target.closest("[data-fold]");
     if (f) { e.stopPropagation(); toggleFold(+f.dataset.fold); return; }
     const b = e.target.closest("[data-go]");
-    if (b) goTo(+b.dataset.go);
+    if (b) { goTo(+b.dataset.go); if (NARROW.matches) setSheet(false); }
   });
   // 普通资料展开一级目录；长词条目录保留分组折叠。
   tocEl.querySelectorAll(".toc-i[data-i]").forEach((x) => {
@@ -1221,6 +1249,11 @@ export async function openReader(el, id, startSeq, startFlash) {
   el.querySelector("#fminus").onclick = () => setFont(fontSize - 1);
   el.querySelector("#fplus").onclick = () => setFont(fontSize + 1);
   el.querySelector("#tocbtn").onclick = () => {
+    if (NARROW.matches) {
+      setSheet(!rdEl.classList.contains("toc-sheet"));
+      tocEl.querySelector(".toc-i.on")?.scrollIntoView({ block: "center" });
+      return;
+    }
     const body = el.querySelector(".rd-body");
     body.classList.toggle("no-toc");
     store.set("reader-toc", !body.classList.contains("no-toc"));

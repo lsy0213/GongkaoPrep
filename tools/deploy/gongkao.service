@@ -1,0 +1,33 @@
+# 上岸备考服务器模式的 systemd 服务：开机自动启动、崩溃自动重启。setup.sh 会装到 /etc/systemd/system/gongkao.service
+#   systemctl status gongkao      看运行状态
+#   journalctl -u gongkao -f      看实时日志（详细日志在 /opt/gongkao/data/logs/）
+#   systemctl restart gongkao     更新代码后重启
+[Unit]
+Description=上岸备考 公考小窝（服务器模式）
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=gongkao
+Group=gongkao
+WorkingDirectory=/opt/gongkao/app
+Environment=GONGKAO_DATA_DIR=/opt/gongkao/data
+Environment=GONGKAO_LIBRARY_ROOT=/opt/gongkao/materials
+Environment=GONGKAO_NO_AUTOBUILD=1
+Environment=PYTHONUNBUFFERED=1
+# GONGKAO_PUBLIC_HOSTS（浏览器地址栏里的 IP 或域名）由 setup.sh 写在这里
+EnvironmentFile=/opt/gongkao/gongkao.env
+# 前面有 Nginx（对外的 HTTPS、压缩都由它做），这里只听本机的 8769
+ExecStart=/opt/gongkao/venv/bin/python main.py --server --port 8769
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+# 安全：只能写数据目录，原文件只读，看不到其他用户的家目录
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/gongkao/data
+
+[Install]
+WantedBy=multi-user.target

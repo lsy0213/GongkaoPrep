@@ -35,20 +35,24 @@ export async function render(el) {
     const q = b.byId[x.qid];
     const isOpen = open.has(x.qid);
     const mat = q.material ? data.mat(q.material) : null;
-    return `<div class="note-item">
-      <div class="row">
-        <span class="chip brand">${MODULE_SHORT[q.module] || esc(q.module)}</span>
-        ${q.real ? `<span class="chip">${esc(srcLabel(q))} · 第 ${q.num} 题</span>` : ""}
-        ${x.fav ? "" : `<span class="small muted">错 ${x.wrong_count} 次 · ${x.mastered ? "已掌握" : x.next_review <= wb.today ? `<b style="color:var(--bad)">今天该复习</b>` : `下次复习 ${esc(x.next_review)}`}
-          · ${x.stability ? `记忆稳定性约 ${x.stability < 1 ? "不到 1" : Math.round(x.stability)} 天` : `已复习 ${x.stage} 次`}</span>`}
+    const status = x.fav ? "" : x.mastered ? "已掌握" : x.next_review <= wb.today ? "今天该复习" : `${esc(x.next_review.slice(5))} 复习`;
+    return `<div class="wb-item ${isOpen ? "open" : ""}">
+      <div class="wb-top">
+        <span class="wb-tag">${MODULE_SHORT[q.module] || esc(q.module)}</span>
+        ${q.real ? `<span class="wb-src">${esc(srcLabel(q))} · 第 ${q.num} 题</span>` : ""}
         <span class="spacer"></span>
-        ${x.fav ? "" : `<select data-reason="${esc(x.qid)}" aria-label="错因" style="width:auto;padding:3px 8px;font-size:13px">
-          ${REASONS.map((r) => `<option value="${r}" ${r === (x.reason || "") ? "selected" : ""}>${r || "选择错因"}</option>`).join("")}</select>`}
-        <button class="btn sm ghost" data-toggle="${esc(x.qid)}">${isOpen ? "收起" : "看题"}</button>
-        ${x.fav ? `<button class="btn sm ghost" data-unfav="${esc(x.qid)}">取消收藏</button>` :
-          `<button class="btn sm ghost" data-master="${esc(x.qid)}" data-v="${x.mastered ? 0 : 1}">${x.mastered ? "移回错题" : "已掌握"}</button>`}
+        ${x.fav ? `<span class="wb-src">收藏</span>` : `<span class="wb-due ${!x.mastered && x.next_review <= wb.today ? "now" : ""}">${status}</span>`}
       </div>
-      <div class="c ${isOpen ? "" : "small ink2"}" style="${isOpen ? "" : "white-space:nowrap;overflow:hidden;text-overflow:ellipsis"}">${isOpen && needsCrop(q) ? cropHTML(q.crop, q.fid) : esc(isOpen ? q.stem : (q.stem || "（图形题，展开看原卷）").split("\n")[0])}</div>
+      <div class="wb-stem ${isOpen ? "full" : ""}" data-toggle="${esc(x.qid)}">${isOpen && needsCrop(q) ? cropHTML(q.crop, q.fid) : esc(isOpen ? q.stem : (q.stem || "（图形题，展开看原卷）").split("\n")[0])}</div>
+      <div class="wb-foot">
+        ${x.fav ? "" : `<span class="wb-meta">错 ${x.wrong_count} 次 · ${x.stability ? `稳定性约 ${x.stability < 1 ? "不到 1" : Math.round(x.stability)} 天` : `已复习 ${x.stage} 次`}</span>`}
+        <span class="spacer"></span>
+        ${x.fav ? "" : `<select class="wb-reason" data-reason="${esc(x.qid)}" aria-label="错因">
+          ${REASONS.map((r) => `<option value="${r}" ${r === (x.reason || "") ? "selected" : ""}>${r || "错因"}</option>`).join("")}</select>`}
+        <button class="wb-btn" data-toggle="${esc(x.qid)}">${isOpen ? "收起" : "看题"}</button>
+        ${x.fav ? `<button class="wb-btn" data-unfav="${esc(x.qid)}">取消收藏</button>` :
+          `<button class="wb-btn" data-master="${esc(x.qid)}" data-v="${x.mastered ? 0 : 1}">${x.mastered ? "移回错题" : "已掌握"}</button>`}
+      </div>
       ${isOpen ? `
         ${mat ? `<details class="mt"><summary class="small ink2" style="cursor:pointer">查看材料：${esc(mat.title || "材料")}</summary><div class="material mt prose">${mat.crop && mat.fig ? cropHTML(mat.crop, mat.fid) : md(mat.text)}</div></details>` : ""}
         ${q.options ? `<div class="options mt">${q.options.map((o, k) => `<div class="opt ${k === q.answer ? "right" : ""}" style="cursor:default"><span class="L">${LETTERS[k]}</span><span>${esc(o)}</span></div>`).join("")}</div>`
@@ -60,34 +64,46 @@ export async function render(el) {
 
   function draw() {
     const xs = list();
+    const open_n = items.filter((x) => !x.mastered).length, done_n = items.filter((x) => x.mastered).length;
     el.innerHTML = `
-      <div class="page-head"><div><div class="eyebrow">错题本</div><h1>错题比新题更值得做</h1>
-        <p>做错的题第二天复习；之后按 FSRS 记忆模型安排：每次到期做对，间隔就按你对这道题的记忆稳定性拉长，间隔超过设置里的天数（默认 30 天）即视为掌握，再做错会重新开始。</p></div>
-        <div class="row">
-          <button class="btn primary lg" id="review" ${due.length ? "" : "disabled"}>${due.length ? `复习今天到期的 ${due.length} 题` : "今天没有到期的错题"}</button>
-        </div></div>
+      <div class="page-head"><div><div class="eyebrow">错题本</div><h1>错题本</h1></div></div>
+      <div class="card wb-hero">
+        <div class="wb-hero-main">
+          <span class="ov-label">今天到期</span>
+          <span class="ov-days"><b class="num">${due.length}</b><small>题</small></span>
+          <span class="ov-date">${due.length ? "按记忆曲线安排，做对间隔会拉长" : "到期的都复习完了"}</span>
+        </div>
+        <button class="btn primary lg" id="review" ${due.length ? "" : "disabled"}>${due.length ? "开始复习" : "没有到期的"}</button>
+        <div class="ov-stats wb-hero-stats">
+          <div><b class="num">${open_n}</b><small>题</small><span>未掌握</span></div>
+          <div><b class="num">${done_n}</b><small>题</small><span>已掌握</span></div>
+          <div><b class="num">${favs.length}</b><small>题</small><span>收藏</span></div>
+        </div>
+      </div>
       <div class="grid cols-main">
-        <div class="card">
-          <div class="tabs" id="tabs">
-            ${[["due", `今日待复习 ${due.length}`], ["all", `未掌握 ${items.filter((x) => !x.mastered).length}`], ["done", `已掌握 ${items.filter((x) => x.mastered).length}`], ["fav", `收藏 ${favs.length}`]]
-              .map(([k, n]) => `<button data-tab="${k}" class="${tab === k ? "active" : ""}">${n}</button>`).join("")}
+        <div>
+          <div class="pills scroll mb" id="tabs">
+            ${[["due", "今日待复习", due.length], ["all", "未掌握", open_n], ["done", "已掌握", done_n], ["fav", "收藏", favs.length]]
+              .map(([k, n, c]) => `<button data-tab="${k}" class="${tab === k ? "active" : ""}">${n}<small class="num">${c}</small></button>`).join("")}
           </div>
-          ${tab !== "fav" ? `<div class="seg mb" id="mods">${["全部", ...MODULES].map((m) => `<button data-m="${esc(m)}" class="${mod === m ? "active" : ""}">${esc(MODULE_SHORT[m] || m)}</button>`).join("")}</div>` : ""}
-          ${xs.length ? xs.map(itemHTML).join("") : `<div class="empty"><h3>${tab === "due" ? "今天没有需要复习的错题" : "这里还是空的"}</h3>
-            <p>${tab === "fav" ? "做题时点“收藏”可以把好题收进来。" : "去 <a href='#/practice'>刷题</a> 吧，做错的题会自动收进来。"}</p></div>`}
-          ${xs.length ? `<div class="row mt">
+          ${tab !== "fav" ? `<div class="pills scroll sm mb" id="mods">${["全部", ...MODULES].map((m) => `<button data-m="${esc(m)}" class="${mod === m ? "active" : ""}">${esc(MODULE_SHORT[m] || m)}</button>`).join("")}</div>` : ""}
+          <div class="card wb-list">
+            ${xs.length ? xs.map(itemHTML).join("") : `<div class="empty"><h3>${tab === "due" ? "今天没有需要复习的错题" : "这里还是空的"}</h3>
+              <p>${tab === "fav" ? "做题时点“收藏”可以把好题收进来。" : "去 <a href='#/practice'>刷题</a> 吧，做错的题会自动收进来。"}</p></div>`}
+          </div>
+          ${xs.length ? `<div class="wb-actions">
             ${tab !== "due" ? `<button class="btn" id="redo">${tab === "fav" ? "练习收藏的题" : `把这 ${xs.length} 题再做一遍`}</button>` : ""}
             <span class="spacer"></span>
-            <label class="small row" style="gap:4px"><input type="checkbox" id="ans-last" checked> 答案放最后（先自测）</label>
-            <button class="btn ghost" id="print">导出打印（${xs.length} 题）</button></div>` : ""}
+            <label class="small row" style="gap:6px"><input type="checkbox" id="ans-last" checked> 答案放最后</label>
+            <button class="btn ghost" id="print">导出打印</button></div>` : ""}
         </div>
         <div class="stack" style="gap:16px">
-          <div class="card"><h3 class="mb">错因统计</h3>${reasonStats()}</div>
-          <div class="card"><h3 class="mb">各模块错题</h3>
-            ${MODULES.map((m) => {
+          <div class="card"><div class="card-head"><h3>错因统计</h3></div>${reasonStats()}</div>
+          <div class="card"><div class="card-head"><h3>各模块未掌握</h3></div>
+            <div class="wb-mods">${MODULES.map((m) => {
               const n = items.filter((x) => x.module === m && !x.mastered).length;
-              return `<div class="row" style="justify-content:space-between;padding:3px 0"><span>${esc(m)}</span><span class="num ${n ? "" : "muted"}">${n}</span></div>`;
-            }).join("")}
+              return `<div class="${n ? "" : "zero"}"><span>${esc(MODULE_SHORT[m] || m)}</span><b class="num">${n}</b></div>`;
+            }).join("")}</div>
           </div>
         </div>
       </div>`;

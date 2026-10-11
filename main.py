@@ -4,6 +4,8 @@
     python main.py --debug    # 开启开发者工具（右键 → 检查），日志也打到控制台
     python main.py --browser  # 不开窗口，用系统浏览器打开（没装 pywebview 时也会自动这样做）
     python main.py --serve    # 只启动数据服务，供开发时在浏览器里调试界面
+    python main.py --server [--port 8769]   # 服务器模式：放在云服务器的 Nginx 后面，手机从外网用密码登录（见 tools/deploy/）
+    python main.py --set-password           # 设置服务器模式的登录密码
 """
 
 import hashlib
@@ -127,7 +129,64 @@ def run_in_browser(url, open_browser=True):
         pass
 
 
+def arg_value(name, default=""):
+    if name in sys.argv:
+        i = sys.argv.index(name)
+        if i + 1 < len(sys.argv):
+            return sys.argv[i + 1]
+    return default
+
+
+def set_password():
+    """在服务器上设置登录密码（输入时不显示）。"""
+    import getpass
+
+    from gongkao import remote, userdb
+
+    userdb.init_db()
+    pw = getpass.getpass("新密码（至少 8 位）：")
+    if pw != getpass.getpass("再输一次："):
+        print("两次输入的不一样，没有修改。")
+        return 1
+    try:
+        remote.set_password(pw)
+    except ValueError as e:
+        print(e)
+        return 1
+    print("密码已设置；已经登录的设备都要重新登录。")
+    return 0
+
+
+def run_server():
+    """服务器模式：不开窗口，只听 127.0.0.1，前面由 Nginx 提供 HTTPS 和外网访问。"""
+    from gongkao import logs, remote
+
+    logs.setup(debug="--debug" in sys.argv)
+    # 也写到标准错误，systemd 收进 journalctl -u gongkao
+    sh = logging.StreamHandler()
+    sh.setLevel(logging.INFO)
+    sh.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+    logging.getLogger().addHandler(sh)
+    from gongkao.server import start_server
+
+    port = start_server(remote_port=int(arg_value("--port", os.environ.get("GONGKAO_PORT", "8769"))))
+    log.info("服务器模式：127.0.0.1:%s，允许的地址：%s", port, ", ".join(remote.allowed_hosts()) or "（没有设置 GONGKAO_PUBLIC_HOSTS）")
+    if not remote.allowed_hosts():
+        log.warning("没有设置 GONGKAO_PUBLIC_HOSTS，外面来的请求都会被拒绝")
+    if not remote.has_password():
+        log.warning("还没有设置登录密码：运行 python main.py --set-password")
+    try:
+        while True:
+            time.sleep(3600)
+    except KeyboardInterrupt:
+        pass
+
+
 def main():
+    if "--set-password" in sys.argv:
+        sys.exit(set_password())
+    if "--server" in sys.argv:
+        return run_server()
     debug = "--debug" in sys.argv
     # 1. 上次在设置里改了数据位置：趁还没打开任何数据库，先把数据搬过去
     move_error = paths.apply_pending_move()

@@ -5,7 +5,8 @@ import os
 import re
 from datetime import timedelta
 
-from .. import library, planner, shizheng
+from .. import exams, library, planner, shizheng
+from ..ruankao import plan as rk_plan
 from ..paths import content_dir, load_content
 from ..userdb import get_settings, now_str, rows, today, today_str
 from . import route
@@ -14,15 +15,34 @@ COURSE_DIR = content_dir() / "course"
 _course_cache = {}
 
 
+def course_dir(exam_id=None):
+    """教程课文所在的文件夹：公考是 content/course，其他考试是 content/exams/<id>/course。"""
+    return COURSE_DIR if exams.is_default(exam_id) else exams.content_path(exam_id) / "course"
+
+
 # ---------------------------------------------------------------- 计划与任务
+
+# 考试清单里 "planner" 写的名字 → 复习计划模块（显式登记，打包工具才能看到依赖）
+PLANNERS = {"ruankao.plan": rk_plan}
+
+
+def plan_module():
+    """当前考试的复习计划：公考用 gongkao.planner，其他考试用清单里 "planner" 指定的模块（没有就不排计划）。"""
+    if exams.is_default():
+        return planner
+    return PLANNERS.get(exams.get().get("planner") or "")
+
 
 def ensure_today_tasks(conn, settings):
     """当天第一次打开时，按复习计划生成今日任务。"""
+    pl = plan_module()
+    if pl is None:
+        return
     day = today_str()
     exists = conn.execute("SELECT 1 FROM tasks WHERE day=? AND source='plan' LIMIT 1", (day,)).fetchone()
     if exists:
         return
-    for t in planner.tasks_for_day(settings, today(), next_lessons(conn)):
+    for t in pl.tasks_for_day(settings, today(), next_lessons(conn)):
         conn.execute(
             "INSERT INTO tasks(day, title, module, link, minutes, done, source) VALUES (?, ?, ?, ?, ?, 0, 'plan')",
             (day, t["title"], t["module"], t["link"], t["minutes"]),
@@ -124,13 +144,22 @@ def today_review(conn, due_wrong, due_cards):
 @route("GET", "/api/plan")
 def plan(ctx):
     s = get_settings(ctx.conn)
-    return {
-        "phases": planner.phases(s, today()),
-        "current": planner.current_phase(s, today()),
-        "milestones": planner.milestones(s, today()),
-        "week": planner.week_preview(s, today()),
+    pl = plan_module()
+    if pl is None:
+        return {"phases": [], "current": None, "milestones": [], "week": [], "tasks": []}
+    out = {
+        "phases": pl.phases(s, today()),
+        "current": pl.current_phase(s, today()),
+        "milestones": pl.milestones(s, today()),
+        "week": pl.week_preview(s, today()),
         "tasks": rows(ctx.conn, "SELECT * FROM tasks WHERE day=? ORDER BY id", (ctx.day,)),
     }
+    # 其他考试的计划自带每周节奏和“调整计划”表单的字段；公考的写在页面里
+    if hasattr(pl, "rhythm"):
+        out["rhythm"] = pl.rhythm(s, today())
+    if hasattr(pl, "FORM"):
+        out["form"] = pl.FORM
+    return out
 
 
 @route("POST", "/api/tasks/toggle")
@@ -212,20 +241,21 @@ def stats(ctx):
 def course_texts():
     """教程每一课的原文 {课 id: 文本}（按文件修改时间缓存）。"""
     out = {}
-    if not COURSE_DIR.is_dir():
+    folder = course_dir()
+    if not folder.is_dir():
         return out
-    for name in sorted(os.listdir(COURSE_DIR)):
+    for name in sorted(os.listdir(folder)):
         if not name.endswith(".md"):
             continue
-        path = COURSE_DIR / name
+        path = folder / name
         try:
             mt = path.stat().st_mtime
         except OSError:
             continue
-        c = _course_cache.get(name)
+        c = _course_cache.get(str(path))
         if not c or c[0] != mt:
             c = (mt, path.read_text(encoding="utf-8"))
-            _course_cache[name] = c
+            _course_cache[str(path)] = c
         out[name[:-3]] = c[1]
     return out
 
@@ -238,7 +268,7 @@ def _course_done(conn):
 def next_lessons(conn):
     """每门课程里下一节还没学完的课 {课程 id: {id, title, min}}。"""
     try:
-        index = load_content(os.path.join("course", "index.json"))
+        index = json.loads((course_dir() / "index.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
     done = _course_done(conn)
@@ -287,5 +317,8 @@ def course_deck(conn):
 
 @route("GET", "/api/decks")
 def decks(ctx):
+    if not exams.is_default():
+        # 其他考试：考试包自带的卡组 + 整理资料生成的卡组 + 学过的教程里的记忆卡
+        return {"decks": [course_deck(ctx.conn)] + exams.pack_decks(), "lib_count": 0}
     lib = library.lib_decks().get("decks", []) + [x for x in [shizheng.chengyu_deck()] if x]
     return {"decks": [course_deck(ctx.conn)] + load_content("flashcards.json")["decks"] + lib, "lib_count": len(lib)}

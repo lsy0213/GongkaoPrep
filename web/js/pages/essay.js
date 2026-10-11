@@ -2,6 +2,8 @@ import { apiGet, apiPost, countChars, esc, fmtClock, mountAIBox, scoreTrend, sto
 
 const SRC = [["builtin", "原创练习"], ["国考", "国考真题"], ["四川", "四川真题"]];
 // 真题卷别：把资料库里五花八门的卷名归成几类，按这个顺序排
+// 手机上材料和题目分两页切换（一起排时材料太长，题目被挤到很下面）
+let essayPane = "q";
 const LEVELS = ["地市级", "副省级", "省市卷", "县乡卷", "行政执法", "上半年", "下半年", "B/C 卷", "不分卷"];
 function levelOf(s) {
   const l = s.level;
@@ -85,7 +87,11 @@ export async function render(el, ctx) {
         ${set.fid ? `<a class="btn sm ghost" href="#/library/view/${set.fid}">原卷</a>` : ""}
         <span class="chip brand">${esc(set.theme)}</span><span class="chip">${esc(set.level)}</span></div>
       <h1 class="mb">${esc(set.title)}</h1>
-      <div class="essay-layout">
+      <div class="essay-switch" role="tablist">
+        <button type="button" data-pane="m" class="${essayPane === "m" ? "active" : ""}">材料 · ${set.materials.length} 则</button>
+        <button type="button" data-pane="q" class="${essayPane === "q" ? "active" : ""}">第 ${qi + 1} 题 · 作答</button>
+      </div>
+      <div class="essay-layout pane-${essayPane}">
         <div class="card materials">
           ${set.materials.map((m) => `<h4>${esc(m.title)}</h4>${m.text.split("\n").filter(Boolean).map((p) => `<p>${esc(p)}</p>`).join("")}`).join("")}
         </div>
@@ -136,6 +142,14 @@ export async function render(el, ctx) {
   }
 
   function bind(q) {
+    el.querySelectorAll("[data-pane]").forEach((x) => (x.onclick = () => {
+      essayPane = x.dataset.pane;
+      el.querySelectorAll("[data-pane]").forEach((y) => y.classList.toggle("active", y === x));
+      const lay = el.querySelector(".essay-layout");
+      lay.classList.toggle("pane-m", essayPane === "m");
+      lay.classList.toggle("pane-q", essayPane === "q");
+      el.scrollTop = 0;
+    }));
     el.querySelectorAll("[data-q]").forEach((x) => (x.onclick = () => {
       qi = +x.dataset.q; phase = "write"; lastSaved = null; history.replaceState(null, "", `#/essay/${set.id}?q=${qi}`); draw();
     }));

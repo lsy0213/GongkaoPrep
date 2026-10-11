@@ -1,0 +1,34 @@
+# 专业英语：高频词汇
+- 架构类高频词
+  - architecture style / pattern：架构风格 / 模式
+  - component / connector：构件 / 连接件
+  - quality attribute：质量属性
+  - performance / availability / reliability：性能 /…
+  - modifiability / maintainability：可修改性 / 可维护性
+  - scalability / elasticity：可伸缩性 / 弹性
+  - security / confidentiality / integrity：安全性 / …
+  - usability / testability / interoperability：易用…
+- 软件工程类高频词
+  - requirement / specification：需求 / 规格说明
+  - functional / non-functional：功能性 / 非功能性
+  - constraint：约束
+  - iteration / incremental：迭代 / 增量
+  - prototype：原型
+  - refactoring：重构
+  - verification / validation：验证（做得对不对）/ 确认
+  - deployment / configuration：部署 / 配置
+- 新技术与安全类
+  - cloud native / serverless：云原生 / 无服务器
+  - big data / data lake / stream processing：大数据 …
+  - edge computing / digital twin：边缘计算 / 数字孪生
+  - machine learning / neural network / large lan…
+  - blockchain / consensus：区块链 / 共识
+  - encryption / authentication / authorization：加…
+  - vulnerability / threat / attack：漏洞等
+  - 记词的方法
+- 记忆要点
+  - trade-off：权衡
+  - stakeholder：利益相关者（干系人）
+  - availability：可用性
+  - reliability：可靠性
+  - interoperability：互操作性

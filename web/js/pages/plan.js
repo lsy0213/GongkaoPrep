@@ -15,9 +15,24 @@ function calendar(checkins, year, month) {
   return `<div class="calendar">${cells}</div>`;
 }
 
+// 公考的每周节奏和计划表单；其他考试由 /api/plan 带回 rhythm、form
+const GK_RHYTHM = [["一", "言语"], ["二", "数量"], ["三", "判断"], ["四", "资料"], ["五", "政治 · 常识"], ["六", "申论"], ["日", "复盘"]];
+const GK_FORM = [
+  { key: "guokao_date", label: "国考笔试日期", type: "date" },
+  { key: "shengkao_date", label: "省考笔试日期", type: "date" },
+  { key: "start_date", label: "开始备考日期", type: "date" },
+  { key: "daily_hours", label: "每天学习时长（小时）", type: "number" },
+];
+
 export async function render(el) {
   const [p, st, settings] = await Promise.all([apiGet("/api/plan"), apiGet("/api/stats"), apiGet("/api/settings")]);
   const cur = p.current;
+  if (!cur) {
+    el.innerHTML = `<div class="page-head"><div><div class="eyebrow">复习计划</div><h1>这门考试还没有复习计划</h1></div></div>`;
+    return;
+  }
+  const rhythm = p.rhythm ? p.rhythm.map((x) => [x.day, x.label]) : GK_RHYTHM;
+  const form = p.form || GK_FORM;
   const total = p.phases.reduce((a, x) => a + x.days, 0);
   const now = new Date();
   const monthCount = st.checkins.filter((d) => d.startsWith(todayISO().slice(0, 7))).length;
@@ -29,31 +44,37 @@ export async function render(el) {
   </div>
 
   <div class="card">
-    <div class="card-head"><h2>备考路线</h2><span class="small muted">按考试日期自动划分，共 ${total} 天</span></div>
-    <div class="table-wrap"><div class="timeline" style="min-width:640px">
-      ${p.phases.map((x) => `<div class="seg-p ${x.status}" style="flex:${Math.max(x.days, 6)}" title="${esc(x.goal)}">
-        <b>${esc(x.name)}</b><span>${esc(x.start.slice(5))}—${esc(x.end.slice(5))}</span></div>`).join("")}
-    </div></div>
-    <div class="grid cols-2 mt">
-      <div>
-        <h3 class="mb" style="margin-bottom:6px">当前阶段要点</h3>
-        <ul class="ink2" style="margin:0;padding-left:1.2em">${cur.focus.map((f) => `<li>${esc(f)}</li>`).join("")}</ul>
-        <p class="small muted">第 ${cur.day_index} 天 / 共 ${cur.days} 天，还剩 ${cur.days_left} 天</p>
-      </div>
-      <div>
-        <h3 style="margin-bottom:6px">每周节奏</h3>
-        <p class="small ink2" style="margin:0">周一言语 · 周二数量 · 周三判断 · 周四资料 · 周五政治和常识 · 周六申论 · 周日复盘。<br>
-        每天另有速算、闪卡、阅读和错题复习。任务量按“每天学习时长”自动调整。</p>
-      </div>
-    </div>
+    <div class="card-head"><h2>备考路线</h2><span class="small muted">按考试日期自动划分 · 共 ${total} 天</span></div>
+    <ol class="phase-list">
+      ${p.phases.map((x) => {
+        const isNow = x.status === "now";
+        return `<li class="ph ${x.status}">
+          <span class="ph-dot" aria-hidden="true"></span>
+          <div class="ph-body">
+            <div class="ph-row"><b>${esc(x.name)}</b>${isNow ? `<span class="ph-tag">进行中</span>` : ""}<span class="spacer"></span>
+              <span class="ph-date num">${esc(x.start.slice(5).replace("-", "."))} – ${esc(x.end.slice(5).replace("-", "."))}</span></div>
+            ${isNow ? `<div class="ph-prog"><i style="width:${Math.round((cur.day_index / cur.days) * 100)}%"></i></div>
+              <div class="ph-meta">第 <b class="num">${cur.day_index}</b> / ${cur.days} 天 · 还剩 ${cur.days_left} 天</div>
+              <ul class="ph-focus">${cur.focus.map((f) => `<li>${esc(f)}</li>`).join("")}</ul>`
+              : `<div class="ph-meta">${x.days} 天${x.status === "done" ? " · 已完成" : ""}</div>`}
+          </div></li>`;
+      }).join("")}
+    </ol>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>每周节奏</h2><span class="small muted">任务量按每天学习时长自动调整</span></div>
+    <div class="rhythm">${rhythm
+      .map(([d, t]) => `<div class="${"日一二三四五六"[now.getDay()] === d ? "on" : ""}"><span>周${esc(d)}</span><b>${esc(t)}</b></div>`).join("")}</div>
+    <p class="small muted" style="margin:12px 0 0">${p.rhythm ? "每天另有闪卡复习；到期错题在首页“今日复习”里。" : "每天另有速算、闪卡、阅读和错题复习。"}</p>
   </div>
 
   <div class="card">
     <div class="card-head"><h2>未来 7 天</h2></div>
-    <div class="week">
-      ${p.week.map((w, i) => `<div class="day ${i === 0 ? "today" : ""}">
-        <h4>${i === 0 ? "今天" : "周" + w.weekday} <span class="muted num" style="font-weight:400">${w.date.slice(5)}</span></h4>
-        <span class="chip brand">${esc(w.focus)}</span>
+    <div class="week-scroll">
+      ${p.week.map((w, i) => `<div class="wk-day ${i === 0 ? "today" : ""}">
+        <div class="wk-h"><b>${i === 0 ? "今天" : "周" + w.weekday}</b><span class="num">${w.date.slice(5).replace("-", ".")}</span></div>
+        <div class="wk-focus">${esc(w.focus)}</div>
         <ul>${w.tasks.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>`).join("")}
     </div>
   </div>
@@ -74,10 +95,8 @@ export async function render(el) {
       <hr class="sep">
       <h3 style="margin-bottom:10px">调整计划</h3>
       <form id="plan-form" class="grid cols-2">
-        <label class="field">国考笔试日期<input type="date" id="gk" value="${esc(settings.guokao_date)}"></label>
-        <label class="field">省考笔试日期<input type="date" id="sk" value="${esc(settings.shengkao_date)}"></label>
-        <label class="field">开始备考日期<input type="date" id="sd" value="${esc(settings.start_date)}"></label>
-        <label class="field">每天学习时长（小时）<input type="number" id="hrs" min="1" max="12" step="0.5" value="${esc(settings.daily_hours)}"></label>
+        ${form.map((x) => `<label class="field">${esc(x.label)}<input type="${x.type === "number" ? "number" : "date"}" data-k="${esc(x.key)}"
+          ${x.type === "number" ? `min="1" max="12" step="0.5"` : ""} value="${esc(settings[x.key] || "")}"></label>`).join("")}
         <div class="row"><button class="btn primary" type="submit">保存并重新安排</button></div>
       </form>
     </div>
@@ -85,12 +104,9 @@ export async function render(el) {
 
   el.querySelector("#plan-form").onsubmit = async (e) => {
     e.preventDefault();
-    const gk = el.querySelector("#gk").value, sk = el.querySelector("#sk").value;
-    if (gk && sk && sk <= gk) { toast("省考日期应在国考之后"); return; }
-    await apiPost("/api/settings", {
-      guokao_date: gk, shengkao_date: sk, start_date: el.querySelector("#sd").value,
-      daily_hours: el.querySelector("#hrs").value,
-    });
+    const body = Object.fromEntries([...el.querySelectorAll("#plan-form [data-k]")].map((x) => [x.dataset.k, x.value]));
+    if (body.guokao_date && body.shengkao_date && body.shengkao_date <= body.guokao_date) { toast("省考日期应在国考之后"); return; }
+    await apiPost("/api/settings", body);
     toast("计划已更新，今日未完成的任务已重新生成");
     render(el);
   };

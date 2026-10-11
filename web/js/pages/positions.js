@@ -32,11 +32,10 @@ export async function render(el) {
         <label class="field">最高学历<select id="p-edu">${EDU.map((x) => `<option ${x === prof.edu ? "selected" : ""}>${x}</option>`).join("")}</select></label>
         <label class="field">政治面貌<select id="p-pol">${POLITICS.map((x) => `<option ${x === prof.politics ? "selected" : ""}>${x}</option>`).join("")}</select></label>
         <label class="field">基层工作年限<input type="number" id="p-years" min="0" max="40" value="${+prof.years || 0}"></label>
-        <label class="field" style="grid-column:span 2">专业（名称、专业类或代码，多个用逗号或空格隔开）
-          <input type="text" id="p-major" value="${esc((prof.majors || []).join("，"))}" placeholder="例如：计算机科学与技术，计算机类，0809"></label>
-        <label class="field row" style="align-items:center;gap:8px;margin-top:22px"><input type="checkbox" id="p-proj" ${prof.project ? "checked" : ""}> 有服务基层项目经历（村官、三支一扶、西部计划等）</label>
+        <label class="field pos-major">专业
+          <input type="text" id="p-major" value="${esc((prof.majors || []).join("，"))}" placeholder="专业名称、专业类或代码，如：会计学，工商管理类"></label>
       </div>
-      <p class="small muted">专业按“职位表里出现了你填的任意一个词”判断，建议同时填专业全称和所属专业类（如“会计学，工商管理类”），以官方专业目录和招录机关解释为准。</p>
+      <label class="switch pos-proj"><input type="checkbox" id="p-proj" ${prof.project ? "checked" : ""}><span aria-hidden="true"></span>有服务基层项目经历<small>村官、三支一扶、西部计划等</small></label>
       <div class="row"><button class="btn primary" type="submit">保存条件</button></div></form>`;
   }
 

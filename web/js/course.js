@@ -18,7 +18,7 @@
 //   flow      流程（横向步骤条）
 //   tabs      标签页（--- 标签名 分隔）
 //   figure    插图（内容是 SVG / HTML 原样输出）
-import { apiPost, esc, fmtClock, LETTERS, md, mountAIBox, shuffle, toast } from "./lib.js";
+import { apiPost, esc, EXAM, fmtClock, LETTERS, md, mountAIBox, shuffle, toast } from "./lib.js";
 import { KINDS } from "./pages/speed.js";
 
 // ---------------------------------------------------------------- 解析
@@ -591,6 +591,19 @@ BLOCKS.write = {
     }));
     const rb = el.querySelector("[data-ref]");
     if (rb) rb.onclick = () => { const r = el.querySelector(".wr-ref"); r.hidden = !r.hidden; rb.textContent = r.hidden ? "看参考答案" : "收起参考答案"; };
+    // 软考等考试的“动笔写”是案例小题，用该考试自己的批改方式
+    if (EXAM.cur?.ai?.write_kind === "rkcase") {
+      mountAIBox(el.querySelector("[data-ai]"), {
+        label: "请 AI 批改",
+        kind: "rkcase",
+        getBody: () => ({
+          material: s[0].text, score: +score || 10,
+          questions: [{ n: 1, score: score || "", text: title || s[0].text.slice(0, 200),
+            reference: [pts ? items(pts.text).join("；") : "", ref ? ref.text : ""].filter(Boolean).join("\n"), answer: ta.value }],
+        }),
+      });
+      return;
+    }
     mountAIBox(el.querySelector("[data-ai]"), {
       label: "请 AI 批改",
       kind: "essay",

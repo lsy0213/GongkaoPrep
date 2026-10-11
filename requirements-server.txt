@@ -1,0 +1,9 @@
+# 服务器模式（python main.py --server，Linux）的依赖：和 requirements.txt 一样，只是不要桌面窗口（pywebview）、
+# 本机 OCR 和 DirectML（服务器上不整理资料，资料在自己电脑上整理好再上传）
+anthropic==1.11.0
+pillow==12.3.0
+pymupdf==1.28.2
+python-docx==1.2.0
+openpyxl==3.1.5
+xlrd==2.0.2
+qrcode==8.2

@@ -1,0 +1,28 @@
+# 架构实践与新技术
+- 企业与信息系统架构 @rk-new-01
+  - 业务、数据、应用、技术四大架构
+  - TOGAF ADM，中心是需求管理
+- Web 与分布式
+  - 层次式架构 @rk-new-02
+    - MVC、MVP、MVVM；ORM、DAO
+  - 负载均衡、缓存与高并发 @rk-new-03
+    - 四层 LVS、七层 Nginx
+    - 读写分离、分库分表、限流熔断
+  - SOA 与 Web 服务 @rk-new-04
+    - SOAP、WSDL、UDDI、BPEL；ESB
+  - 微服务 @rk-new-05
+    - 注册中心、网关、配置中心、熔断、链路追踪
+  - 云原生 @rk-new-06
+    - 容器、K8s、Serverless；IaaS、PaaS、SaaS
+  - DevOps 与持续交付 @rk-new-12
+- 大数据 @rk-new-07
+  - Lambda：批处理层、加速层、服务层
+  - Kappa：只有流处理，重放历史数据
+- 专项架构
+  - 嵌入式与通信系统架构 @rk-new-08
+  - 安全架构设计 @rk-new-09
+    - 零信任：永不信任，始终验证
+- 新技术
+  - 物联网、人工智能、区块链 @rk-new-10
+  - 边缘计算、数字孪生与大模型应用 @rk-new-11
+    - RAG：向量检索 + 大模型生成

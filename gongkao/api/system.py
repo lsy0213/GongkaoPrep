@@ -1,9 +1,9 @@
-"""设置、界面偏好、导出导入、备份、AI 服务商信息。"""
+"""设置、界面偏好、考试切换、导出导入、备份、AI 服务商信息。"""
 
 import json
 import re
 
-from .. import ai, secret, userdb
+from .. import ai, exams, secret, userdb
 from ..userdb import DEFAULT_SETTINGS, get_settings
 from . import route
 
@@ -11,6 +11,83 @@ from . import route
 @route("GET", "/api/ping")
 def ping(ctx):
     return {"app": "gongkao-prep"}
+
+
+@route("GET", "/api/session")
+def session(ctx):
+    """界面从哪里打开的：local 本机窗口 / lan 局域网手机 / remote 服务器（用密码登录）。管理类功能只在本机显示。"""
+    h = ctx.handler
+    return {"mode": "remote" if h and h.is_remote else "lan" if h and h.is_lan else "local"}
+
+
+@route("GET", "/api/exams")
+def exams_list(ctx):
+    """有哪些考试、这个界面当前在哪门考试（按 Cookie，没带就是上次选的）。"""
+    return {"current": exams.current_id(), "default": exams.DEFAULT, "cookie": exams.COOKIE,
+            "exams": [exams.public(e) for e in exams.all_exams()]}
+
+
+@route("GET", "/api/exams/overview")
+def exams_overview(ctx):
+    """全部考试总览：每门考试的考试日期倒计时、做题量、正确率、学习时长、到期错题。"""
+    from datetime import date
+
+    from .. import planner
+
+    day = ctx.day
+    out = []
+    for ex in exams.all_exams():
+        with userdb.db(ex["id"]) as conn:
+            s = get_settings(conn)
+            if exams.is_default(ex["id"]):
+                dates = [{"title": m["title"], "date": m["date"], "days_left": m["days_left"]}
+                         for m in planner.milestones(s, userdb.today()) if m["exam_day"]]
+            else:
+                try:
+                    d = date.fromisoformat(str(s.get("exam_date") or "")[:10])
+                    dates = [{"title": f"{ex.get('family', '')}{ex.get('name', '')}".strip(), "date": d.isoformat(),
+                              "days_left": (d - userdb.today()).days}]
+                except ValueError:
+                    dates = []
+            n, ok = conn.execute("SELECT COUNT(*), COALESCE(SUM(correct),0) FROM attempts").fetchone()
+            minutes = conn.execute("SELECT COALESCE(SUM(minutes),0) FROM study_logs").fetchone()[0]
+            today_min = conn.execute("SELECT COALESCE(SUM(minutes),0) FROM study_logs WHERE day=?", (day,)).fetchone()[0]
+            last = conn.execute("SELECT MAX(day) FROM study_logs").fetchone()[0] or ""
+            due = conn.execute("SELECT COUNT(*) FROM wrongbook WHERE mastered=0 AND next_review<=?", (day,)).fetchone()[0]
+        out.append({"id": ex["id"], "name": ex.get("name"), "family": ex.get("family", ""), "level": ex.get("level", ""),
+                    "short": ex.get("short", ""), "emblem": ex.get("emblem", ""), "color": ex.get("color", ""),
+                    "desc": ex.get("desc", ""), "dates": dates, "questions": n,
+                    "accuracy": round(ok / n * 100, 1) if n else 0, "minutes": minutes, "minutes_today": today_min,
+                    "last_day": last, "due_wrong": due})
+    return {"current": exams.current_id(), "today": day, "exams": out, "conflicts": _date_conflicts(out)}
+
+
+def _date_conflicts(items, gap=21):
+    """不同考试的考试日相隔不到 gap 天时提醒：冲刺期会重叠，同一天则只能选一门。"""
+    dates = [(e["short"] or e["name"], m) for e in items for m in e["dates"] if m["days_left"] >= 0]
+    dates.sort(key=lambda x: x[1]["date"])
+    out = []
+    for i, (a, ma) in enumerate(dates):
+        for b, mb in dates[i + 1:]:
+            if a == b:
+                continue
+            days = mb["days_left"] - ma["days_left"]
+            if days > gap:
+                break
+            what = "同一天考试，只能选一门" if days == 0 else f"只隔 {days} 天，冲刺期会重叠"
+            out.append({"a": ma["title"], "a_date": ma["date"], "b": mb["title"],
+                        "b_date": mb["date"], "days": days, "note": what})
+    return out
+
+
+@route("POST", "/api/exams/current")
+def exams_switch(ctx):
+    """记住选的考试（界面同时把它写进 Cookie，下一个请求起就按这门考试读写）。"""
+    ex = str(ctx.body.get("id") or "")
+    if not exams.valid(ex):
+        raise ValueError("没有这门考试")
+    exams.remember(ctx.conn, ex)
+    return {"ok": True, "current": ex}
 
 
 @route("GET", "/api/settings")
@@ -25,16 +102,17 @@ def settings_save(ctx):
     conn, body, day = ctx.conn, ctx.body, ctx.day
     if body.get("ai_clear_key"):
         conn.execute("UPDATE settings SET value='' WHERE key='ai_api_key'")
+    own = exams.exam_settings()  # 当前考试自己的设置项（公考没有，都在共用设置里）
     for k, v in body.items():
-        if k not in DEFAULT_SETTINGS:
+        if k not in DEFAULT_SETTINGS and k not in own:
             continue
         if k == "ai_api_key":
             if not (v or "").strip():
                 continue  # Key 输入框留空表示「不修改」
             v = secret.protect(str(v).strip())
-        conn.execute("INSERT OR REPLACE INTO settings(key, value) VALUES (?, ?)", (k, str(v).strip()))
+        userdb.save_setting(conn, k, str(v).strip())
     # 修改考试日期后，重新生成今天尚未开始的计划任务
-    if {"guokao_date", "shengkao_date", "start_date", "daily_hours"} & body.keys():
+    if {"guokao_date", "shengkao_date", "exam_date", "start_date", "daily_hours"} & body.keys():
         conn.execute("DELETE FROM tasks WHERE day=? AND source='plan' AND done=0", (day,))
         if not conn.execute("SELECT 1 FROM tasks WHERE day=? AND source='plan'", (day,)).fetchone():
             ensure_today_tasks(conn, get_settings(conn))
@@ -43,18 +121,13 @@ def settings_save(ctx):
 
 @route("GET", "/api/prefs")
 def prefs_get(ctx):
-    return {r["key"]: json.loads(r["value"]) for r in ctx.conn.execute("SELECT key, value FROM prefs")}
+    return userdb.get_prefs(ctx.conn)
 
 
 @route("POST", "/api/prefs")
 def prefs_save(ctx):
-    # 界面偏好（主题、草稿、已学章节等），值为任意 JSON；值为 null 表示删除
-    for k, v in ctx.body.items():
-        if v is None:
-            ctx.conn.execute("DELETE FROM prefs WHERE key=?", (k,))
-        else:
-            ctx.conn.execute("INSERT OR REPLACE INTO prefs(key, value) VALUES (?, ?)",
-                             (k, json.dumps(v, ensure_ascii=False)))
+    # 界面偏好（主题、草稿、已学章节等），值为任意 JSON；值为 null 表示删除。外观等共用偏好所有考试一份（exams.GLOBAL_PREFS）
+    userdb.save_prefs(ctx.conn, ctx.body)
     return {"ok": True}
 
 
@@ -70,7 +143,7 @@ def import_(ctx):
 
 @route("GET", "/api/backups")
 def backups(ctx):
-    return {"items": userdb.list_backups(), "dir": str(userdb.BACKUP_DIR), "keep": userdb.DAILY_KEEP}
+    return {"items": userdb.list_backups(), "dir": str(userdb.backups_dir()), "keep": userdb.DAILY_KEEP}
 
 
 @route("POST", "/api/backups/create")

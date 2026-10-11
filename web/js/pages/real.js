@@ -75,17 +75,16 @@ export async function render(el, ctx) {
         const answered = p.answered || 0;
         const mods = MODULES.filter((m) => p.modules[m]);
         const pct = answered ? Math.min(100, Math.round((pr.done / answered) * 100)) : 0;
-        return `<div class="paper-row">
+        return `<div class="paper-row pr-card">
           <div class="info"><div class="t"><span class="year-tag">${p.year}</span>${esc(p.title.replace(/^\d{4}\s*年?/, ""))}</div>
             <div class="meta">${p.count} 题${answered < p.count ? `（${p.count - answered} 题缺答案）` : ""} · ${mods.map((m) => `${MODULE_SHORT[m]} ${p.modules[m]}`).join(" / ")}</div></div>
           <div class="stat"><div class="progress"><i style="width:${pct}%"></i></div>
-            <div class="meta mt">${pr.done ? `做过 ${pr.done} 题 · 正确率 ${Math.round((pr.correct / pr.done) * 100)}%` : "还没做过"}</div></div>
+            <span class="meta">${pr.done ? `做过 ${pr.done} 题 · 正确率 ${Math.round((pr.correct / pr.done) * 100)}%` : "还没做过"}</span></div>
           <div class="actions">
             ${answered ? `<a class="btn sm primary" href="#/real/${p.id}?mode=exam">整卷模考</a>
             <a class="btn sm" href="#/real/${p.id}">练习</a>
-            <select data-mod="${p.id}" style="width:auto;padding:3px 6px;font-size:13px"><option value="">按模块…</option>${mods.map((m) => `<option value="${esc(m)}">${esc(m)}（${p.modules[m]}）</option>`).join("")}</select>` : `<span class="small muted">暂无答案</span>`}
-            <a class="btn sm ghost" href="#/library/view/${p.fid}" title="在资料库里看原卷 PDF">原卷</a>
-            ${p.answer_fid ? `<a class="btn sm ghost" href="#/library/view/${p.answer_fid}" title="答案解析原文件">解析</a>` : ""}
+            <select class="pr-mod" data-mod="${p.id}" aria-label="按模块练"><option value="">按模块练</option>${mods.map((m) => `<option value="${esc(m)}">${esc(MODULE_SHORT[m] || m)} · ${p.modules[m]} 题</option>`).join("")}</select>` : `<span class="small muted">暂无答案</span>`}
+            <span class="pr-links"><a href="#/library/view/${p.fid}" title="在资料库里看原卷 PDF">原卷</a>${p.answer_fid ? `<a href="#/library/view/${p.answer_fid}" title="答案解析原文件">解析</a>` : ""}</span>
           </div></div>`;
       }).join("") : `<div class="empty">这一类没有卷子</div>`}`;
   }

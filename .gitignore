@@ -25,3 +25,6 @@ content/curated/*.txt
 content/doc_answers.json
 content/shizheng_answers.json
 content/speed_bank.json
+
+# 用户自己提供、版权不属于本项目的图片（白瓷星轨的天使角色），不进公开仓库；没有时界面不显示
+web/img/skin/private/
