@@ -85,6 +85,9 @@ def test_wrong_host_and_origin(srv):
     cookie = login(srv)[2]["set-cookie"].split(";")[0]
     assert req(srv, "/", cookie=cookie, host="attacker.test")[0] == 403
     assert login(srv, origin="https://evil.test")[0] == 403
+    # 手机浏览器有时在 Host 里带上默认端口
+    assert req(srv, "/", cookie=cookie, host=f"{HOST}:443")[0] == 200
+    assert req(srv, "/", cookie=cookie, host=f"{HOST}:8443")[0] == 403
 
 
 def test_lockout(srv):

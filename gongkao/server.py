@@ -136,7 +136,8 @@ class Handler(BaseHTTPRequestHandler):
         if self.is_remote:
             from . import remote
 
-            return host in remote.allowed_hosts()
+            # 有的浏览器（手机上常见）把默认端口也写进 Host：“IP:443” 和 “IP” 是同一个地址
+            return host in remote.allowed_hosts() or host.removesuffix(":443") in remote.allowed_hosts()
         if self.is_lan:
             return host in getattr(self.server, "extra_hosts", ())
         port = self.server.server_address[1]
